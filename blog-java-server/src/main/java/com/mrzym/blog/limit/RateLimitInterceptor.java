@@ -45,13 +45,14 @@ public class RateLimitInterceptor implements HandlerInterceptor {
         RateLimitStore.Decision decision =
                 store.acquire(rule.key() + ":" + ip, rule.max(), rule.windowSeconds());
 
-        response.setHeader("X-Ratelimit-Limit", String.valueOf(rule.max()));
-        response.setHeader("X-Ratelimit-Remaining", String.valueOf(decision.remaining()));
-        response.setHeader("X-Ratelimit-Reset", String.valueOf(decision.resetEpochSecond()));
+        response.setHeader("X-RateLimit-Limit", String.valueOf(rule.max()));
+        response.setHeader("X-RateLimit-Remaining", String.valueOf(decision.remaining()));
+        response.setHeader("X-RateLimit-Reset", String.valueOf(decision.resetEpochSecond()));
 
         if (!decision.allowed()) {
             response.setStatus(429);
-            response.setHeader("Retry-After", String.valueOf(decision.retryAfterSeconds()));
+            // koa2-ratelimit 的 Retry-After 固定是 interval（窗口长度），不是剩余秒数
+            response.setHeader("Retry-After", String.valueOf(rule.windowSeconds()));
             response.setContentType("application/json;charset=UTF-8");
             response.getWriter().write("{\n  \"message\": \"" + jsonEscape(rule.message()) + "\"\n}");
             return false;

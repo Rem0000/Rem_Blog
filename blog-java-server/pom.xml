@@ -38,6 +38,13 @@
       <artifactId>spring-boot-starter-websocket</artifactId>
     </dependency>
 
+    <!-- 独立端口 8889 的聊天 WebSocket（Spring 自带 STOMP 只能挂主端口） -->
+    <dependency>
+      <groupId>org.java-websocket</groupId>
+      <artifactId>Java-WebSocket</artifactId>
+      <version>1.5.7</version>
+    </dependency>
+
     <!-- MyBatis-Plus（Spring Boot 3 专用 starter） -->
     <dependency>
       <groupId>com.baomidou</groupId>

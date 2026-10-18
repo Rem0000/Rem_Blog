@@ -6,6 +6,7 @@ import com.mrzym.blog.common.ErrorCode;
 import com.mrzym.blog.common.Result;
 import com.mrzym.blog.common.Tips;
 import com.mrzym.blog.entity.ConfigEntity;
+import com.mrzym.blog.limit.RateLimit;
 import com.mrzym.blog.service.ConfigService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -56,10 +57,11 @@ public class ConfigController {
     }
 
     /**
-     * 访问量 +1。
-     * TODO(批次5)：原实现带限流 60 分钟 100 次，切流前补上。
+     * 访问量 +1。原实现带限流：60 分钟 100 次。
      */
     @PutMapping("/addView")
+    @RateLimit(key = "config:addView", max = 100, windowSeconds = 3600,
+            message = "访问网站过于频繁 请稍后再试")
     public Object addView() {
         try {
             String res = configService.addView();
