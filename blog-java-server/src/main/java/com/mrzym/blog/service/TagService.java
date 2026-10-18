@@ -3,8 +3,9 @@ package com.mrzym.blog.service;
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.baomidou.mybatisplus.core.metadata.IPage;
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
+import com.mrzym.blog.common.CurrentPageResult;
 import com.mrzym.blog.common.Num;
-import com.mrzym.blog.common.PageResult;
+import com.mrzym.blog.dto.TagQuery;
 import com.mrzym.blog.entity.TagEntity;
 import com.mrzym.blog.mapper.TagMapper;
 import lombok.RequiredArgsConstructor;
@@ -54,15 +55,26 @@ public class TagService {
         return list.isEmpty() ? null : list.get(0);
     }
 
-    public PageResult<TagEntity> getTagList(Object page, Object pageSize, String tagName) {
-        int pageNo = Num.toInt(page, 1);
-        int size = Num.toInt(pageSize, 10);
+    public CurrentPageResult<TagEntity> getTagList(TagQuery query) {
+        // 现网契约是 current/size；没有时兼容 page/pageSize
+        Object rawCurrent = query.getCurrent() != null ? query.getCurrent() : query.getPage();
+        Object rawSize = query.getSize() != null ? query.getSize() : query.getPageSize();
+        int pageNo = Math.max(Num.toInt(rawCurrent, 1), 1);
+        int size = Num.toInt(rawSize, 10);
+        if (size <= 0) {
+            size = 10;
+        }
+
         LambdaQueryWrapper<TagEntity> wrapper = new LambdaQueryWrapper<>();
-        if (tagName != null && !tagName.isEmpty()) {
-            wrapper.like(TagEntity::getTagName, tagName);
+        if (query.getTagName() != null && !query.getTagName().isEmpty()) {
+            wrapper.like(TagEntity::getTagName, query.getTagName());
         }
         IPage<TagEntity> result = tagMapper.selectPage(new Page<>(pageNo, size), wrapper);
-        return PageResult.of(page, pageSize, result.getTotal(), result.getRecords());
+        return CurrentPageResult.of(
+                rawCurrent != null ? rawCurrent : pageNo,
+                rawSize != null ? rawSize : size,
+                result.getTotal(),
+                result.getRecords());
     }
 
     /** 供文章模块反查用：按 id 列表取标签 */

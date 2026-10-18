@@ -2,8 +2,8 @@ package com.mrzym.blog.controller;
 
 import com.mrzym.blog.auth.RequireRole;
 import com.mrzym.blog.common.BizException;
+import com.mrzym.blog.common.CurrentPageResult;
 import com.mrzym.blog.common.ErrorCode;
-import com.mrzym.blog.common.PageResult;
 import com.mrzym.blog.common.Result;
 import com.mrzym.blog.dto.CategoryForm;
 import com.mrzym.blog.dto.CategoryQuery;
@@ -95,11 +95,9 @@ public class CategoryController {
     }
 
     @PostMapping("/getCategoryList")
-    public Result<PageResult<CategoryEntity>> list(@RequestBody CategoryQuery query) {
+    public Result<CurrentPageResult<CategoryEntity>> list(@RequestBody CategoryQuery query) {
         try {
-            PageResult<CategoryEntity> page = categoryService.getCategoryList(
-                    query.getPage(), query.getPageSize(), query.getCategoryName());
-            return Result.ok("分页查找分类成功", page);
+            return Result.ok("分页查找分类成功", categoryService.getCategoryList(query));
         } catch (Exception e) {
             log.error("分页查找分类失败", e);
             throw new BizException(ErrorCode.CATEGORY, "分页查找分类失败");

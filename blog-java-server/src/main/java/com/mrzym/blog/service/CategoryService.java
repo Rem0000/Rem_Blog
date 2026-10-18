@@ -3,8 +3,9 @@ package com.mrzym.blog.service;
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.baomidou.mybatisplus.core.metadata.IPage;
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
+import com.mrzym.blog.common.CurrentPageResult;
 import com.mrzym.blog.common.Num;
-import com.mrzym.blog.common.PageResult;
+import com.mrzym.blog.dto.CategoryQuery;
 import com.mrzym.blog.entity.CategoryEntity;
 import com.mrzym.blog.mapper.CategoryMapper;
 import lombok.RequiredArgsConstructor;
@@ -55,15 +56,26 @@ public class CategoryService {
         return list.isEmpty() ? null : list.get(0);
     }
 
-    public PageResult<CategoryEntity> getCategoryList(Object page, Object pageSize, String categoryName) {
-        int pageNo = Num.toInt(page, 1);
-        int size = Num.toInt(pageSize, 10);
+    public CurrentPageResult<CategoryEntity> getCategoryList(CategoryQuery query) {
+        // 现网契约是 current/size；没有时兼容 page/pageSize
+        Object rawCurrent = query.getCurrent() != null ? query.getCurrent() : query.getPage();
+        Object rawSize = query.getSize() != null ? query.getSize() : query.getPageSize();
+        int pageNo = Math.max(Num.toInt(rawCurrent, 1), 1);
+        int size = Num.toInt(rawSize, 10);
+        if (size <= 0) {
+            size = 10;
+        }
+
         LambdaQueryWrapper<CategoryEntity> wrapper = new LambdaQueryWrapper<>();
-        if (categoryName != null && !categoryName.isEmpty()) {
-            wrapper.like(CategoryEntity::getCategoryName, categoryName);
+        if (query.getCategoryName() != null && !query.getCategoryName().isEmpty()) {
+            wrapper.like(CategoryEntity::getCategoryName, query.getCategoryName());
         }
         IPage<CategoryEntity> result = categoryMapper.selectPage(new Page<>(pageNo, size), wrapper);
-        return PageResult.of(page, pageSize, result.getTotal(), result.getRecords());
+        return CurrentPageResult.of(
+                rawCurrent != null ? rawCurrent : pageNo,
+                rawSize != null ? rawSize : size,
+                result.getTotal(),
+                result.getRecords());
     }
 
     /** 字典：只回 id + category_name，不带时间字段（对齐原实现 attributes 限制） */

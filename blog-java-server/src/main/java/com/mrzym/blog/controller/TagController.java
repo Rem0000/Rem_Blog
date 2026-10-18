@@ -2,8 +2,8 @@ package com.mrzym.blog.controller;
 
 import com.mrzym.blog.auth.RequireRole;
 import com.mrzym.blog.common.BizException;
+import com.mrzym.blog.common.CurrentPageResult;
 import com.mrzym.blog.common.ErrorCode;
-import com.mrzym.blog.common.PageResult;
 import com.mrzym.blog.common.Result;
 import com.mrzym.blog.dto.DeleteRequest;
 import com.mrzym.blog.dto.TagForm;
@@ -93,11 +93,9 @@ public class TagController {
     }
 
     @PostMapping("/getTagList")
-    public Result<PageResult<TagEntity>> list(@RequestBody TagQuery query) {
+    public Result<CurrentPageResult<TagEntity>> list(@RequestBody TagQuery query) {
         try {
-            PageResult<TagEntity> page = tagService.getTagList(
-                    query.getPage(), query.getPageSize(), query.getTagName());
-            return Result.ok("分页查找标签成功", page);
+            return Result.ok("分页查找标签成功", tagService.getTagList(query));
         } catch (Exception e) {
             log.error("分页查找标签失败", e);
             throw new BizException(ErrorCode.TAG, "分页查找标签失败");
