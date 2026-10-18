@@ -1,6 +1,7 @@
 package com.mrzym.blog.config;
 
 import com.mrzym.blog.auth.AuthInterceptor;
+import com.mrzym.blog.limit.RateLimitInterceptor;
 import lombok.RequiredArgsConstructor;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.web.servlet.config.annotation.CorsRegistry;
@@ -12,11 +13,14 @@ import org.springframework.web.servlet.config.annotation.WebMvcConfigurer;
 public class WebMvcConfig implements WebMvcConfigurer {
 
     private final AuthInterceptor authInterceptor;
+    private final RateLimitInterceptor rateLimitInterceptor;
 
     @Override
     public void addInterceptors(InterceptorRegistry registry) {
-        // 只对带 @RequireRole 的 handler 生效，其余直接放行
-        registry.addInterceptor(authInterceptor).addPathPatterns("/**");
+        // 限流在前（原实现 createTimesLimiter 挂在 auth 之前），鉴权在后。
+        // 两者都只对带注解的 handler 生效，其余直接放行。
+        registry.addInterceptor(rateLimitInterceptor).addPathPatterns("/**").order(0);
+        registry.addInterceptor(authInterceptor).addPathPatterns("/**").order(1);
     }
 
     @Override

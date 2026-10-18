@@ -65,11 +65,12 @@ spring:
 | config | `POST /config/update`、`GET /config/`、`PUT /config/addView` | ✅ |
 | category | `add` / `update` / `delete` / `getCategoryList` / `getCategoryDictionary` | ✅ |
 | tag | `add` / `update` / `delete` / `getTagList` / `getTagDictionary` | ✅ |
-| pageHeader | `GET /pageHeader/getAll` | ✅ |
+| pageHeader | `GET /pageHeader/getAll`、`POST /pageHeader/addOrUpdate`、`POST /pageHeader/delete` | ✅ |
 | statistic | `GET /statistic` | ✅ |
 | user | `GET /user/getUserInfoById/{id}` | ⚠️ 只做了信息查询，登录/注册/改密未做 |
 | article | `GET /article/blogHomeGetArticleList/{current}/{size}` | ⚠️ 只做了首页列表，其余 19 个接口未做 |
-| links / comment / message / talk / photo / chat / 上传 | — | ⬜ 待做 |
+| links | `add`（1 分钟 5 次限流）/ `frontUpdate` / `backUpdate` / `delete` / `approve` / `getLinksList` | ✅ |
+| comment / message / talk / photo / chat / 上传 | — | ⬜ 待做 |
 
 **首页闭环已通**：`config` + `category` + `tag` + `pageHeader` + `statistic` + `user` + 文章列表，前台首页不再有 404。
 
@@ -82,6 +83,12 @@ spring:
 | JSON 响应 | 下划线：`blog_name`、`create_at`… | 全局 `spring.jackson.property-naming-strategy: SNAKE_CASE` |
 | 分页入参 | `page` / `pageSize` | `PageQuery` DTO |
 | 分页响应 | `{page, pageSize, total, list}` | `PageResult` |
+
+> **分页现状（重要）**：body 分页并非所有接口都是 `page`/`pageSize`。
+> `links/getLinksList` 的现网契约是 **`current`/`size`**（前台 `link-list.vue`、后台 `links/index.ts` 都在传），
+> 响应是 `{current, size, list, total}`，已实测 `mrzym.top` 同此，所以 links 按现网实现。
+> category / tag 目前用的是 `page`/`pageSize`，与前端实际发送的 `current`/`size` 不一致
+> （第 2 页起会拿不到数据），后续统一前必须先确认前端改法。
 
 **显式覆盖的四个例外**（前端既有的驼峰命名，不能跟着全局策略走）：
 
@@ -109,7 +116,8 @@ spring:
 ## 已知差异
 
 - **分类改名校验保留了原实现的怪逻辑**：`verifyCategory` 里用的是 `res.id == id`（同名即报"分类已存在"），而 tag 用的是 `!==`（逻辑正确）。这里照抄以保持行为一致，代码中有注释说明；要修就把 `equals` 改成 `!equals`。
-- **限流未实现**：`/config/addView`（60 分钟 100 次）和全局 200 次/分钟，属于批次 5，切流前必须补。
+- **背景图改名修正了原实现的崩溃**：`pageHeader/addOrUpdate` 在“改成一个未被占用的 route_name”时，Node 的 `getOneByPath` 返回 null 后直接读 `flag.id` 会抛 TypeError（500）。这里改成允许改名，其余唯一性校验行为不变。
+- **限流基础设施已就绪**：`@RateLimit` + 进程内固定窗口（`limit/RateLimitStore`、`limit/RateLimitInterceptor`），已挂在 `/links/add`（1 分钟 5 次）。超限行为与现网实测一致：429 + `{"message":"新增过于频繁 请稍后再试"}` + `X-Ratelimit-Limit/Remaining/Reset` + `Retry-After`。`/config/addView`（60 分钟 100 次）和全局 200 次/分钟尚未挂上，切流前必须补。
 - **上传未实现**：`/config/update` 里删除旧图的那段逻辑依赖上传模块，暂时跳过。
 
 ## 验证建议
@@ -131,7 +139,7 @@ curl -s -X POST http://127.0.0.1:8088/category/getCategoryList \
 
 | 项 | 结果 |
 |---|---|
-| `mvn package` | ✅ BUILD SUCCESS，33 个源文件，产出 33 MB 可执行 jar |
+| `mvn package` | ✅ BUILD SUCCESS，68 个源文件，产出 33 MB 可执行 jar |
 | Spring 上下文启动 | ✅ Tomcat 起在配置端口 |
 | 错误响应体 | ✅ 500 + `{"code":"100007","message":"获取网站设置失败"}`（无 `result` 字段） |
 | 404 响应 | ✅ `{"code":"404","message":"接口没有找到"}` |
@@ -147,6 +155,13 @@ curl -s -X POST http://127.0.0.1:8088/category/getCategoryList \
 | `GET /user/getUserInfoById/1` | ✅ `{"id":1,"role":1,"nick_name":"Rem","ipAddress":"四川"}`（混驼峰，不含 password） |
 | `GET /article/blogHomeGetArticleList/1/10` | ✅ 分类名与标签数组组装正确，`createdAt` 格式为 `2026-10-18 19:09:39` |
 | `blog_config.changed` 时间格式 | ✅ `2026-10-18 19:09:38`（无 `T`） |
+| `POST /links/add` | ✅ `{"code":0,"message":"发布友链成功","result":true}`，并写入 `blog_notify`（type=4、is_view=1） |
+| `/links/add` 限流 | ✅ 第 6 次 429，body/头与现网一致（`{"message":"新增过于频繁 请稍后再试"}`、`X-Ratelimit-*`、`Retry-After`） |
+| `POST /links/getLinksList` | ✅ `{current,size,list,total}`（字段顺序也对齐现网），`createdAt` 无 `T`，`created_at` 升序；status/site_name/time 过滤与空值边界均通过 |
+| `PUT /links/approve` / `delete` | ✅ approve 返回 `[affectedCount]`（对齐 Sequelize），delete 命中 0 条时 `result:null`、命中时返回条数 |
+| 友链鉴权 | ✅ 无 token 401/`100016`；admin 超管 403/`100002`（ADMIN_NOT_SUPER） |
+| `POST /pageHeader/addOrUpdate` | ✅ 新增/修改均 `result:true`；route_name 重复时 500 + `100013`「已经存在相同的背景路径」；改名到空闲路径可用（原实现会崩，见已知差异） |
+| `POST /pageHeader/delete` | ✅ 命中返回条数，重复删除 `result:null`；`GET /pageHeader/getAll` 仍只出 `id/route_name/bg_url` |
 
 > **踩过的坑**：`ArticleListItem` 一开始只写了 `@JsonProperty("createdAt")`，漏了
 > `@JsonFormat(pattern = "yyyy-MM-dd HH:mm:ss")`，结果输出成 `2026-10-18T19:09:39`。

@@ -21,4 +21,26 @@ public final class Num {
             return defaultValue;
         }
     }
+
+    /**
+     * 可空版本：null / 空串 / 非数字都返回 null。
+     * 用于“传了才更新、没传就跳过”的字段（比如友链的 status）。
+     */
+    public static Integer toInteger(Object value) {
+        if (value == null) {
+            return null;
+        }
+        if (value instanceof Number n) {
+            return n.intValue();
+        }
+        String text = String.valueOf(value).trim();
+        if (text.isEmpty()) {
+            return null;
+        }
+        try {
+            return Integer.parseInt(text);
+        } catch (NumberFormatException e) {
+            return null;
+        }
+    }
 }
