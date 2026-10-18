@@ -25,7 +25,7 @@ public class PageHeaderService {
      * 无 id 走 create。返回值恒为 true。
      */
     public boolean addOrUpdate(Integer id, String routeName, String bgUrl) {
-        LocalDateTime now = LocalDateTime.now();
+        LocalDateTime now = LocalDateTime.now().withNano(0);
         if (id != null && id != 0) {
             PageHeaderEntity patch = new PageHeaderEntity();
             patch.setId(id);

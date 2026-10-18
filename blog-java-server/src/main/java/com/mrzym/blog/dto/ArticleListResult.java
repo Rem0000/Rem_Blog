@@ -5,23 +5,22 @@ import lombok.Data;
 import java.util.List;
 
 /**
- * 首页文章分页结果：{"current":1,"size":2,"list":[...],"total":27}
+ * 首页/时间轴等路径分页的响应：{current, size, list, total}。
  *
- * 注意：这个接口的分页参数是**路径参数**（/blogHomeGetArticleList/:current/:size），
- * 不是 body 里的 page/pageSize，所以这里沿用 current/size 以保持契约。
+ * current/size 用 Object 原样回显：现网是路径参数，返回的是字符串 "1"/"2"。
  */
 @Data
 public class ArticleListResult {
 
-    private int current;
+    private Object current;
 
-    private int size;
+    private Object size;
 
-    private List<ArticleListItem> list;
+    private List<?> list;
 
     private long total;
 
-    public static ArticleListResult of(int current, int size, long total, List<ArticleListItem> list) {
+    public static ArticleListResult of(Object current, Object size, long total, List<?> list) {
         ArticleListResult r = new ArticleListResult();
         r.current = current;
         r.size = size;

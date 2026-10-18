@@ -12,4 +12,8 @@ public interface UserMapper {
      */
     @Select("SELECT id, role, nick_name, qq, avatar, ip AS ipAddress FROM blog_user WHERE id = #{id}")
     UserInfo selectInfoById(@Param("id") Integer id);
+
+    /** 文章详情里的 authorName，对应原实现 getAuthorNameById */
+    @Select("SELECT nick_name FROM blog_user WHERE id = #{id}")
+    String selectNickNameById(@Param("id") Integer id);
 }

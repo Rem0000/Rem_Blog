@@ -23,7 +23,7 @@ public class NotifyService {
      * 写一条通知。对应原实现 createNotify + 默认 isView=1。
      */
     public void addNotify(Integer userId, Integer type, Integer toId, String message) {
-        LocalDateTime now = LocalDateTime.now();
+        LocalDateTime now = LocalDateTime.now().withNano(0);
         NotifyEntity entity = new NotifyEntity();
         entity.setUserId(userId);
         entity.setType(type);

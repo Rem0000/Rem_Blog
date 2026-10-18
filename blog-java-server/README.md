@@ -68,7 +68,7 @@ spring:
 | pageHeader | `GET /pageHeader/getAll`、`POST /pageHeader/addOrUpdate`、`POST /pageHeader/delete` | ✅ |
 | statistic | `GET /statistic` | ✅ |
 | user | `GET /user/getUserInfoById/{id}` | ⚠️ 只做了信息查询，登录/注册/改密未做 |
-| article | `GET /article/blogHomeGetArticleList/{current}/{size}` | ⚠️ 只做了首页列表，其余 19 个接口未做 |
+| article | 首页 / 时间轴 / 详情 / 增删改 / 置顶 / 公开私密 / 标题查重 / 按标签 / 按分类 / 推荐 / 搜索 / 热门 / 点赞 / 阅读时长 / updateUrl，共 20 个 | ✅ |
 | links | `add`（1 分钟 5 次限流）/ `frontUpdate` / `backUpdate` / `delete` / `approve` / `getLinksList` | ✅ |
 | comment / message / talk / photo / chat / 上传 | — | ⬜ 待做 |
 
@@ -117,6 +117,9 @@ spring:
 
 - **分类改名校验保留了原实现的怪逻辑**：`verifyCategory` 里用的是 `res.id == id`（同名即报"分类已存在"），而 tag 用的是 `!==`（逻辑正确）。这里照抄以保持行为一致，代码中有注释说明；要修就把 `equals` 改成 `!equals`。
 - **背景图改名修正了原实现的崩溃**：`pageHeader/addOrUpdate` 在“改成一个未被占用的 route_name”时，Node 的 `getOneByPath` 返回 null 后直接读 `flag.id` 会抛 TypeError（500）。这里改成允许改名，其余唯一性校验行为不变。
+- **文章按标签筛选修正了原实现的退化**：`getArticleList` 传了一个没有任何文章的 `tag_id` 时，Node 会因为 `articleIdList` 为 null 跳过过滤，把全部文章返回；这里按语义返回空列表。
+- **`article/updateUrl` 修正为可用**：原实现把 service 直接当 handler 用、没有设置 `ctx.body`，现网访问是 404 空响应；这里补成真正执行封面域名替换并返回受影响行数。
+- **首页/时间轴的 current/size 回显字符串**：现网是路径参数，响应里是 `"1"`/`"2"`；首页实现之前回显的是数字，已一并对齐。
 - **限流基础设施已就绪**：`@RateLimit` + 进程内固定窗口（`limit/RateLimitStore`、`limit/RateLimitInterceptor`），已挂在 `/links/add`（1 分钟 5 次）。超限行为与现网实测一致：429 + `{"message":"新增过于频繁 请稍后再试"}` + `X-Ratelimit-Limit/Remaining/Reset` + `Retry-After`。`/config/addView`（60 分钟 100 次）和全局 200 次/分钟尚未挂上，切流前必须补。
 - **上传未实现**：`/config/update` 里删除旧图的那段逻辑依赖上传模块，暂时跳过。
 
@@ -139,7 +142,7 @@ curl -s -X POST http://127.0.0.1:8088/category/getCategoryList \
 
 | 项 | 结果 |
 |---|---|
-| `mvn package` | ✅ BUILD SUCCESS，68 个源文件，产出 33 MB 可执行 jar |
+| `mvn package` | ✅ BUILD SUCCESS，80+ 个源文件，产出 33 MB 可执行 jar |
 | Spring 上下文启动 | ✅ Tomcat 起在配置端口 |
 | 错误响应体 | ✅ 500 + `{"code":"100007","message":"获取网站设置失败"}`（无 `result` 字段） |
 | 404 响应 | ✅ `{"code":"404","message":"接口没有找到"}` |
@@ -162,6 +165,13 @@ curl -s -X POST http://127.0.0.1:8088/category/getCategoryList \
 | 友链鉴权 | ✅ 无 token 401/`100016`；admin 超管 403/`100002`（ADMIN_NOT_SUPER） |
 | `POST /pageHeader/addOrUpdate` | ✅ 新增/修改均 `result:true`；route_name 重复时 500 + `100013`「已经存在相同的背景路径」；改名到空闲路径可用（原实现会崩，见已知差异） |
 | `POST /pageHeader/delete` | ✅ 命中返回条数，重复删除 `result:null`；`GET /pageHeader/getAll` 仍只出 `id/route_name/bg_url` |
+| `GET /article/getArticleById/1` | ✅ 21 个字段顺序/命名与现网一致，`tagIdList`/`tagNameList` 按关联顺序，`view_times` 每次访问 +1（响应即加后值） |
+| `GET /article/blogHomeGetArticleList/1/2` | ✅ `current`/`size` 回显字符串，列表项顺序与现网一致（createdAt/updatedAt 在最前） |
+| 时间轴 / 按标签 / 按分类 | ✅ 时间轴按年分组 `{year,articleList}`；按标签/分类 `current/size` 回显与现网一致；标签无文章返回空 |
+| 推荐 / 搜索 / 热门 | ✅ 上一篇/下一篇回退当前文章、同标签最多 6 篇；搜索片段截取 `关键词长度+12`；热门按 `view_times` 前 5 |
+| `POST /article/getArticleList` | ✅ 需登录；默认 `status in (1,2)`，排除 `article_content`/`origin_url`，标题/置顶/状态/分类/标签/时间筛选均通过 |
+| 文章增删改 | ✅ 标题查重、分类按名新建、标签按名新建并重建关联；`delete/{id}/1` 进回收站、`/3` 永久删除并清关联；返回结构 `{article,articleTagList}` / `{res,newArticleTagList}` |
+| 置顶/公开/恢复/点赞/阅读时长 | ✅ 消息文案与现网一致（含 `isPublic` 按“当前状态”取名），阅读时长按毫秒累加 |
 
 > **踩过的坑**：`ArticleListItem` 一开始只写了 `@JsonProperty("createdAt")`，漏了
 > `@JsonFormat(pattern = "yyyy-MM-dd HH:mm:ss")`，结果输出成 `2026-10-18T19:09:39`。

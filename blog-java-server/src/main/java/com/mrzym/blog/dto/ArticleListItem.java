@@ -2,6 +2,7 @@ package com.mrzym.blog.dto;
 
 import com.fasterxml.jackson.annotation.JsonFormat;
 import com.fasterxml.jackson.annotation.JsonProperty;
+import com.fasterxml.jackson.annotation.JsonPropertyOrder;
 import lombok.Data;
 
 import java.time.LocalDateTime;
@@ -17,6 +18,9 @@ import java.util.List;
  * 其中 createdAt / updatedAt / categoryName / tagNameList 是驼峰，其余是下划线。
  */
 @Data
+@JsonPropertyOrder({"createdAt", "updatedAt", "id", "article_title", "author_id", "category_id",
+        "article_description", "article_cover", "is_top", "order", "status", "type",
+        "view_times", "thumbs_up_times", "reading_duration", "categoryName", "tagNameList"})
 public class ArticleListItem {
 
     // 注意：只写 @JsonProperty 不够，不加 @JsonFormat 会输出成 2026-10-18T19:09:39

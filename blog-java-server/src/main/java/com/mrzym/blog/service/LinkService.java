@@ -48,7 +48,7 @@ public class LinkService {
      *  - 无 id：create，status 强制 1，user_id 原样落库。
      */
     public boolean addOrUpdate(LinkForm form) {
-        LocalDateTime now = LocalDateTime.now();
+        LocalDateTime now = LocalDateTime.now().withNano(0);
 
         if (isUpdate(form)) {
             Integer id = Num.toInteger(form.getId());
@@ -103,7 +103,7 @@ public class LinkService {
         if (ids == null || ids.isEmpty()) {
             return 0;
         }
-        LocalDateTime now = LocalDateTime.now();
+        LocalDateTime now = LocalDateTime.now().withNano(0);
         return linkMapper.update(null, new LambdaUpdateWrapper<LinkEntity>()
                 .set(LinkEntity::getStatus, 2)
                 .set(LinkEntity::getUpdatedAt, now)
