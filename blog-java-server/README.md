@@ -74,6 +74,7 @@ spring:
 | comment | `add`（1 分钟 20 次）/ `apply`（1 分钟 20 次）/ `thumbUp`（10 次）/ `cancelCommentLike`（10 次）/ `delete` / `backDelete` / `backGetCommentList` / `frontGetParentComment` / `frontGetChildrenComment` / `getCommentTotal` | ✅ |
 | message | `add`（5 次）/ `update`（5 次）/ `delete`（5 次）/ `backDelete` / `like`（5 次）/ `cancelLike`（5 次）/ `getMessageList` / `getAllMessage` / `getHotTagList` | ✅ |
 | talk | `publishTalk` / `updateTalk` / `deleteTalkById` / `togglePublic` / `toggleTop` / `revertTalk` / `getTalkList` / `getTalkById` / `like`（5 次）/ `cancelLike`（5 次）/ `blogGetTalkList` | ✅ |
+| photo / photoAlbum | `photo/add` / `photo/delete` / `photo/revert` / `photo/getPhotoListByAlbumId` / `photo/getAllPhotosByAlbumId`；`photoAlbum/add` / `delete` / `update` / `/`（分页）/ `getAllAlbumList` | ✅ |
 | comment / message / talk / photo / chat / 上传 | — | ⬜ 待做 |
 
 **首页闭环已通**：`config` + `category` + `tag` + `pageHeader` + `statistic` + `user` + 文章列表，前台首页不再有 404。
@@ -134,6 +135,8 @@ spring:
 - **留言游客昵称**：原实现 `randomNickname("游客", 5)`；这里生成「游客 + 5 位数字/字母」，前缀和长度一致。
 - **`talk/getTalkById` 的时间是 ISO UTC**：原实现用 `{...res.dataValues}` 展开，Date 直接 JSON 化成 `2026-10-18T11:45:57.000Z`；列表接口才是 `yyyy-MM-dd HH:mm:ss`。这里照现网分开处理，别“顺手统一”。
 - **说说删除的返回类型不统一**：进回收站（status 1/2）返回 `[count]`（Sequelize update 数组），永久删除（status 3）返回数字 `count`；已照抄。
+- **相册/图片删除的返回类型同理不统一**：图片 `type=1` 回收站返回 `[count]`、`type=2` 返回数字；相册删除返回 boolean。
+- **相册分页路径是 `/photoAlbum/`**（带斜杠），Controller 用 `@PostMapping({"", "/"})` 同时兼容。
 - **限流基础设施已就绪**：`@RateLimit` + 进程内固定窗口（`limit/RateLimitStore`、`limit/RateLimitInterceptor`），已挂在 `/links/add`（1 分钟 5 次）。超限行为与现网实测一致：429 + `{"message":"新增过于频繁 请稍后再试"}` + `X-Ratelimit-Limit/Remaining/Reset` + `Retry-After`。`/config/addView`（60 分钟 100 次）和全局 200 次/分钟尚未挂上，切流前必须补。
 - **上传未实现**：`/config/update` 里删除旧图的那段逻辑依赖上传模块，暂时跳过。
 
@@ -204,6 +207,8 @@ curl -s -X POST http://127.0.0.1:8088/category/getCategoryList \
 | `talk` 列表 | ✅ 后台按 status 过滤、前台只出公开；`is_top ASC, created_at DESC`；`talkImgList`/`nick_name`/`avatar`/`is_like` 缺失时不输出 |
 | `talk` 详情 | ✅ 时间输出 ISO UTC（对齐现网 `{...dataValues}` 的坑），`talkImgList` 恒存在（空数组） |
 | `talk` 置顶/公开/恢复/点赞/删除 | ✅ 文案按目标状态取名；回收返回 `[1]`、永久删除返回 `1`；点赞走 like_times 自增，不写 blog_like |
+| `photo` 增删查 | ✅ `bulkCreate` 返回创建行数组；`type=1` 返回 `[count]`、`type=2` 返回数字；`getAllPhotosByAlbumId` 只出 status=1 且按创建时间倒序 |
+| `photoAlbum` 增删改查 | ✅ 名称唯一（改时排除自己）；删除相册连带删图片；分页 `{current,size,list,total}`、全量按创建时间倒序 |
 
 > **踩过的坑**：`ArticleListItem` 一开始只写了 `@JsonProperty("createdAt")`，漏了
 > `@JsonFormat(pattern = "yyyy-MM-dd HH:mm:ss")`，结果输出成 `2026-10-18T19:09:39`。
