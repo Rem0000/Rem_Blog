@@ -5,6 +5,7 @@ import com.baomidou.mybatisplus.annotation.TableId;
 import com.baomidou.mybatisplus.annotation.TableName;
 import com.fasterxml.jackson.annotation.JsonFormat;
 import com.fasterxml.jackson.annotation.JsonProperty;
+import com.fasterxml.jackson.annotation.JsonPropertyOrder;
 import lombok.Data;
 
 import java.time.LocalDateTime;
@@ -15,6 +16,7 @@ import java.time.LocalDateTime;
  */
 @Data
 @TableName("blog_notify")
+@JsonPropertyOrder({"createdAt", "updatedAt", "id", "message", "user_id", "type", "to_id", "is_view"})
 public class NotifyEntity {
 
     @JsonProperty("createdAt")

@@ -70,6 +70,7 @@ spring:
 | user | `register`（1 分钟 3 次限流）/ `login` / `updateOwnUserInfo` / `updatePassword` / `updateRole` / `adminUpdateUserInfo` / `getUserList` / `getUserInfoById` | ✅ |
 | article | 首页 / 时间轴 / 详情 / 增删改 / 置顶 / 公开私密 / 标题查重 / 按标签 / 按分类 / 推荐 / 搜索 / 热门 / 点赞 / 阅读时长 / updateUrl，共 20 个 | ✅ |
 | links | `add`（1 分钟 5 次限流）/ `frontUpdate` / `backUpdate` / `delete` / `approve` / `getLinksList` | ✅ |
+| like / notify | `like/addLike`（1 分钟 10 次）/ `like/cancelLike`（1 分钟 10 次）/ `like/getIsLikeByIdOrIpAndType` / `notify/update` / `notify/delete` / `notify/getNotifyList` | ✅ |
 | comment / message / talk / photo / chat / 上传 | — | ⬜ 待做 |
 
 **首页闭环已通**：`config` + `category` + `tag` + `pageHeader` + `statistic` + `user` + 文章列表，前台首页不再有 404。
@@ -180,6 +181,8 @@ curl -s -X POST http://127.0.0.1:8088/category/getCategoryList \
 | 改资料 / 改密码 | ✅ `updatePassword` 校验两次一致、旧密码匹配、id=2 保护；改完可用新密码登录 |
 | `getUserList` | ✅ 需登录；`ip` 原样 + `ip_address` 追加（注意是下划线），role 仅在数字非 0 时过滤 |
 | `getUserInfoById/5201314` | ✅ 只回 `{id,role,nick_name:"超级管理员"}`；普通用户回 `ipAddress` 驼峰 |
+| `like` 三个接口 | ✅ 登录用户按 `user_id`、游客按 `ip` 维度判重；重复/未点赞错误文案与现网一致；点赞数同步到文章 `thumbs_up_times`、说说/留言 `like_times`、评论 `thumbs_up` |
+| `notify` 三个接口 | ✅ 列表按 `is_view` 升序 + `created_at` 倒序，`userId` 驼峰入参；已阅返回 boolean；删除返回 `{res:条数}` |
 
 > **踩过的坑**：`ArticleListItem` 一开始只写了 `@JsonProperty("createdAt")`，漏了
 > `@JsonFormat(pattern = "yyyy-MM-dd HH:mm:ss")`，结果输出成 `2026-10-18T19:09:39`。

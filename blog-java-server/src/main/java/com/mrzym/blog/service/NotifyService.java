@@ -1,5 +1,11 @@
 package com.mrzym.blog.service;
 
+import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
+import com.baomidou.mybatisplus.core.conditions.update.LambdaUpdateWrapper;
+import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
+import com.mrzym.blog.common.CurrentPageResult;
+import com.mrzym.blog.common.Num;
+import com.mrzym.blog.dto.NotifyQuery;
 import com.mrzym.blog.entity.NotifyEntity;
 import com.mrzym.blog.mapper.NotifyMapper;
 import lombok.RequiredArgsConstructor;
@@ -44,5 +50,44 @@ public class NotifyService {
         } catch (Exception e) {
             log.error("新增消息通知失败: {}", message, e);
         }
+    }
+
+    /** 已阅：is_view -> 2 */
+    public boolean markViewed(Integer id) {
+        LocalDateTime now = LocalDateTime.now().withNano(0);
+        return notifyMapper.update(null, new LambdaUpdateWrapper<NotifyEntity>()
+                .set(NotifyEntity::getIsView, 2)
+                .set(NotifyEntity::getUpdatedAt, now)
+                .eq(NotifyEntity::getId, id)) > 0;
+    }
+
+    /** 删除，返回条数 */
+    public int deleteNotify(Integer id) {
+        return notifyMapper.deleteById(id);
+    }
+
+    /** 分页：is_view 升序 + created_at 倒序 */
+    public CurrentPageResult<NotifyEntity> getNotifyList(NotifyQuery query) {
+        Object rawCurrent = query.getCurrent();
+        Object rawSize = query.getSize();
+        int pageNo = Math.max(Num.toInt(rawCurrent, 1), 1);
+        int pageSize = Num.toInt(rawSize, 10);
+        if (pageSize <= 0) {
+            pageSize = 10;
+        }
+
+        LambdaQueryWrapper<NotifyEntity> wrapper = new LambdaQueryWrapper<>();
+        Integer userId = Num.toInteger(query.getUserId());
+        if (userId != null && userId != 0) {
+            wrapper.eq(NotifyEntity::getUserId, userId);
+        }
+        wrapper.orderByAsc(NotifyEntity::getIsView).orderByDesc(NotifyEntity::getCreatedAt);
+
+        Page<NotifyEntity> page = notifyMapper.selectPage(new Page<>(pageNo, pageSize), wrapper);
+        return CurrentPageResult.of(
+                rawCurrent != null ? rawCurrent : pageNo,
+                rawSize != null ? rawSize : pageSize,
+                page.getTotal(),
+                page.getRecords());
     }
 }
