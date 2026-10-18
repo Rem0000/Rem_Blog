@@ -6,7 +6,7 @@ const path = require("path");
 const swaggerDefinition = {
   //swagger-ui显示的基本信息，如标题、版本、描述
   info: {
-    title: "小张的个人博客接口文档",
+    title: "Rem的个人博客接口文档",
     version: "1.0.0",
     description: "API文档",
   },

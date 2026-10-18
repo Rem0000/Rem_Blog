@@ -73,10 +73,10 @@ export default defineConfig({
       overlay: false,
     },
     proxy: {
-      // 本地后端代理
+      // 本地后端代理（Java 后端跑在 8088）
       "/api": {
         //要访问的跨域的域名
-        target: "http://localhost:8888",
+        target: "http://localhost:8088",
         changeOrigin: true,
         rewrite: (path) => path.replace(/^\/api/, ""),
       },

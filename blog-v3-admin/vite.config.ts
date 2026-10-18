@@ -52,7 +52,7 @@ export default ({ command, mode }: ConfigEnv): UserConfigExport => {
       // 本地跨域代理 https://cn.vitejs.dev/config/server-options.html#server-proxy
       proxy: {
         "/api": {
-          target: "http://127.0.0.1:8888",
+          target: "http://127.0.0.1:8088",
           changeOrigin: true,
           rewrite: path => path.replace(/^\/api/, "")
         },

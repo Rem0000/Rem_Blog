@@ -16,7 +16,7 @@ class UserService {
     // 过滤敏感词
     nick_name = await filterSensitive(nick_name);
     // 随机生成昵称
-    nick_name = nick_name ? nick_name : randomNickname("小张的迷弟");
+    nick_name = nick_name ? nick_name : randomNickname("Rem的迷弟");
     const avatar = "http://mrzym.top/online/9bb507f4bd065759a3d093d04.webp";
     const res = await User.create({ username, password, nick_name, qq, avatar, role: 2 });
 

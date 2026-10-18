@@ -125,7 +125,7 @@ CREATE TABLE `blog_comment` (
 DROP TABLE IF EXISTS `blog_config`;
 CREATE TABLE `blog_config` (
   `id` int NOT NULL AUTO_INCREMENT,
-  `blog_name` varchar(55) DEFAULT '小张的博客' COMMENT '博客名称',
+  `blog_name` varchar(55) DEFAULT 'Rem的博客' COMMENT '博客名称',
   `blog_avatar` varchar(255) DEFAULT 'https://mrzym.gitee.io/blogimg/html/rabbit.png' COMMENT '博客头像',
   `avatar_bg` varchar(255) DEFAULT NULL COMMENT '博客头像背景图',
   `personal_say` varchar(255) DEFAULT NULL COMMENT '个人签名',

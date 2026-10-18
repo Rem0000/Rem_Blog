@@ -427,7 +427,7 @@ onBeforeUnmount(() => {
           <div class="chat-bg">
             <div class="chat-header box-shadow flex items-center justify-between">
               <div class="left">
-                小张的聊天室
+                Rem的聊天室
                 <span v-if="isConnecting" class="!ml-[10px] text-sm online-total">连接中...</span>
                 <span v-else class="!ml-[10px] text-sm online-total"
                   >在线人数 {{ onlineList.length || 0 }} 人</span

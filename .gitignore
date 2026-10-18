@@ -21,6 +21,9 @@ pnpm-debug.log*
 .env.local
 *.pem
 *.key
+# 本地私有配置（数据库密码等）
+application-local.yml
+application-*.local.yml
 
 # ---------- IDE / 系统 ----------
 .idea/

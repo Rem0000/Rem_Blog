@@ -35,16 +35,29 @@ export MYSQL_PASSWORD=12345678
 export MYSQL_DB=online_blog
 export JWT_SECRET=blog
 export ADMIN_PASSWORD=你的超管密码
-export APP_PORT=8888
+export APP_PORT=8088
 java -jar target/blog-server-1.0.0.jar
 
 # 或者直接跑
 mvn spring-boot:run
 ```
 
-**重要**：Spring Boot **不会**读原项目的 `.env` 文件（那个文件里有行内注释，按 properties 解析会把注释当成值）。请用环境变量注入，或在 `application.yml` 里改默认值。用 docker compose 时把上面这些写进 `environment:` 即可。
+**本地开发**（推荐）：把密码写进 `src/main/resources/application-local.yml`，该文件已被 gitignore：
 
-## 已实现（批次 0 + 批次 1 的一部分）
+```yaml
+spring:
+  datasource:
+    username: root
+    password: 你的密码
+```
+
+由 `application.yml` 的 `spring.config.import: optional:classpath:application-local.yml` 自动加载，**不依赖启动时的工作目录**。也可以用上面的环境变量，优先级更高。
+
+> 注意：`application-local.yml` 会被打进 jar（`BOOT-INF/classes/`）。本地开发没问题，**部署到服务器时请用环境变量 `MYSQL_PASSWORD` 覆盖**，不要把带密码的 jar 分发出去。
+
+**重要**：Spring Boot **不会**读原项目的 `.env` 文件（那个文件里有行内注释，按 properties 解析会把注释当成值）。用 docker compose 时把环境变量写进 `environment:` 即可。
+
+## 已实现
 
 | 模块 | 接口 | 状态 |
 |---|---|---|
@@ -52,8 +65,13 @@ mvn spring-boot:run
 | config | `POST /config/update`、`GET /config/`、`PUT /config/addView` | ✅ |
 | category | `add` / `update` / `delete` / `getCategoryList` / `getCategoryDictionary` | ✅ |
 | tag | `add` / `update` / `delete` / `getTagList` / `getTagDictionary` | ✅ |
-| pageHeader / links / statistic | — | ⬜ 待做 |
-| 批次 2 ~ 5 | user / article / comment / message / talk / photo / chat / 上传 | ⬜ 待做 |
+| pageHeader | `GET /pageHeader/getAll` | ✅ |
+| statistic | `GET /statistic` | ✅ |
+| user | `GET /user/getUserInfoById/{id}` | ⚠️ 只做了信息查询，登录/注册/改密未做 |
+| article | `GET /article/blogHomeGetArticleList/{current}/{size}` | ⚠️ 只做了首页列表，其余 19 个接口未做 |
+| links / comment / message / talk / photo / chat / 上传 | — | ⬜ 待做 |
+
+**首页闭环已通**：`config` + `category` + `tag` + `pageHeader` + `statistic` + `user` + 文章列表，前台首页不再有 404。
 
 ## 命名与分页约定
 
@@ -99,9 +117,9 @@ mvn spring-boot:run
 先用现网的 golden 响应做比对，重点看三个接口：
 
 ```bash
-curl -s http://127.0.0.1:8888/config/ | jq          # 字段名、时间格式、code 类型
-curl -s "http://127.0.0.1:8888/category/getCategoryDictionary" | jq
-curl -s -X POST http://127.0.0.1:8888/category/getCategoryList \
+curl -s http://127.0.0.1:8088/config/ | jq          # 字段名、时间格式、code 类型
+curl -s "http://127.0.0.1:8088/category/getCategoryDictionary" | jq
+curl -s -X POST http://127.0.0.1:8088/category/getCategoryList \
   -H 'Content-Type: application/json' -d '{"current":"1","size":"10"}' | jq
 ```
 
@@ -121,9 +139,21 @@ curl -s -X POST http://127.0.0.1:8888/category/getCategoryList \
 | Node 签发的 token（4 字节密钥） | ✅ 验签通过，进入业务逻辑 |
 | 过期 token | ✅ 401 + `{"code":"100016","message":"token已过期"}` |
 | 伪造签名 | ✅ 403 + `{"code":"100002","message":"无效的token"}` |
-| Swagger | ✅ `/v3/api-docs` 列出全部 13 个接口 |
+| Swagger | ✅ `/v3/api-docs` 列出全部接口 |
 | JSON 命名策略（`JsonNamingTest`） | ✅ 4 个用例通过：`category_name` 转下划线、`createdAt` 保持驼峰、`page`/`pageSize` 收发正常、`categoryIdList` 不被转成 `category_id_list` |
-| 数据库真实读写 | ⬜ **未验证**（本机 MySQL root 密码未知，测试时库连不上） |
+| 数据库真实读写 | ✅ 在临时库灌演示数据实测通过（见下） |
+| `GET /statistic` | ✅ `{"articleCount":2,"tagCount":2,"categoryCount":2,"userCount":1}`（驼峰） |
+| `GET /pageHeader/getAll` | ✅ `[{"id":1,"route_name":"Home","bg_url":"..."}]`（下划线，无时间戳） |
+| `GET /user/getUserInfoById/1` | ✅ `{"id":1,"role":1,"nick_name":"Rem","ipAddress":"四川"}`（混驼峰，不含 password） |
+| `GET /article/blogHomeGetArticleList/1/10` | ✅ 分类名与标签数组组装正确，`createdAt` 格式为 `2026-10-18 19:09:39` |
+| `blog_config.changed` 时间格式 | ✅ `2026-10-18 19:09:38`（无 `T`） |
+
+> **踩过的坑**：`ArticleListItem` 一开始只写了 `@JsonProperty("createdAt")`，漏了
+> `@JsonFormat(pattern = "yyyy-MM-dd HH:mm:ss")`，结果输出成 `2026-10-18T19:09:39`。
+> 新建任何带时间字段的 DTO 都要两个注解一起写。
+
+> **联调用的演示数据**：`sql/seed-demo.sql`（2 篇文章、2 个分类、2 个标签、1 个用户、1 张背景图）。
+> 导入命令：`mysql -uroot -p online_blog < sql/seed-demo.sql`。不导入也不影响接口，只是列表为空。
 
 > `src/test/resources/mockito-extensions/org.mockito.plugins.MockMaker` 是为了绕过某个受限环境下
 > Mockito 加载字节码代理失败的问题（`Failed to load ... MockMaker`）。正常开发机上可以删掉，
