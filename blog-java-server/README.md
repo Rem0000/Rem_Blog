@@ -73,6 +73,7 @@ spring:
 | like / notify | `like/addLike`（1 分钟 10 次）/ `like/cancelLike`（1 分钟 10 次）/ `like/getIsLikeByIdOrIpAndType` / `notify/update` / `notify/delete` / `notify/getNotifyList` | ✅ |
 | comment | `add`（1 分钟 20 次）/ `apply`（1 分钟 20 次）/ `thumbUp`（10 次）/ `cancelCommentLike`（10 次）/ `delete` / `backDelete` / `backGetCommentList` / `frontGetParentComment` / `frontGetChildrenComment` / `getCommentTotal` | ✅ |
 | message | `add`（5 次）/ `update`（5 次）/ `delete`（5 次）/ `backDelete` / `like`（5 次）/ `cancelLike`（5 次）/ `getMessageList` / `getAllMessage` / `getHotTagList` | ✅ |
+| talk | `publishTalk` / `updateTalk` / `deleteTalkById` / `togglePublic` / `toggleTop` / `revertTalk` / `getTalkList` / `getTalkById` / `like`（5 次）/ `cancelLike`（5 次）/ `blogGetTalkList` | ✅ |
 | comment / message / talk / photo / chat / 上传 | — | ⬜ 待做 |
 
 **首页闭环已通**：`config` + `category` + `tag` + `pageHeader` + `statistic` + `user` + 文章列表，前台首页不再有 404。
@@ -131,6 +132,8 @@ spring:
 - **评论出参里的 `form_name`**：原实现把 `from_name` 拼成了 `form_name`，前端评论列表真的在读这个 key，所以保留；`is_like` 只在点赞状态场景出现。
 - **`message/getHotTagList` 现网是 404**：本地 Node 源码里有这个路由，但线上部署版本没有（实测 `GET http://mrzym.top/api/message/getHotTagList` 返回 404）。这里按源码实现成可用接口，前端目前也没依赖 404。
 - **留言游客昵称**：原实现 `randomNickname("游客", 5)`；这里生成「游客 + 5 位数字/字母」，前缀和长度一致。
+- **`talk/getTalkById` 的时间是 ISO UTC**：原实现用 `{...res.dataValues}` 展开，Date 直接 JSON 化成 `2026-10-18T11:45:57.000Z`；列表接口才是 `yyyy-MM-dd HH:mm:ss`。这里照现网分开处理，别“顺手统一”。
+- **说说删除的返回类型不统一**：进回收站（status 1/2）返回 `[count]`（Sequelize update 数组），永久删除（status 3）返回数字 `count`；已照抄。
 - **限流基础设施已就绪**：`@RateLimit` + 进程内固定窗口（`limit/RateLimitStore`、`limit/RateLimitInterceptor`），已挂在 `/links/add`（1 分钟 5 次）。超限行为与现网实测一致：429 + `{"message":"新增过于频繁 请稍后再试"}` + `X-Ratelimit-Limit/Remaining/Reset` + `Retry-After`。`/config/addView`（60 分钟 100 次）和全局 200 次/分钟尚未挂上，切流前必须补。
 - **上传未实现**：`/config/update` 里删除旧图的那段逻辑依赖上传模块，暂时跳过。
 
@@ -197,6 +200,10 @@ curl -s -X POST http://127.0.0.1:8088/category/getCategoryList \
 | `message` 新增 | ✅ 游客自动生成「游客xxxxx」、内容过敏感词；`user_id != 1` 时给博主写 type=3 通知；返回 `发布成功` |
 | `message` 列表 | ✅ 字段顺序/`avatar`/`is_like`/`comment_total` 与现网一致；支持 tag/message/time 过滤；`getAllMessage` 只带 `avatar` |
 | `message` 点赞/改删 | ✅ 点赞数刷新 `updated_at`；`update`/`delete`/`backDelete` 鉴权与限流符合路由定义；热门标签按 count 倒序前 10 |
+| `talk` 发布/修改 | ✅ `talkImgList` 关联整体重建；发布返回 `{id}`；修改返回 boolean；图片按关联表自增顺序输出 |
+| `talk` 列表 | ✅ 后台按 status 过滤、前台只出公开；`is_top ASC, created_at DESC`；`talkImgList`/`nick_name`/`avatar`/`is_like` 缺失时不输出 |
+| `talk` 详情 | ✅ 时间输出 ISO UTC（对齐现网 `{...dataValues}` 的坑），`talkImgList` 恒存在（空数组） |
+| `talk` 置顶/公开/恢复/点赞/删除 | ✅ 文案按目标状态取名；回收返回 `[1]`、永久删除返回 `1`；点赞走 like_times 自增，不写 blog_like |
 
 > **踩过的坑**：`ArticleListItem` 一开始只写了 `@JsonProperty("createdAt")`，漏了
 > `@JsonFormat(pattern = "yyyy-MM-dd HH:mm:ss")`，结果输出成 `2026-10-18T19:09:39`。
