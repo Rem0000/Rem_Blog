@@ -27,6 +27,11 @@ spring:
     # 不要配置 non_null：现网会把 null 字段原样返回，省略会破坏契约
     serialization:
       write-dates-as-timestamps: false
+  servlet:
+    multipart:
+      # 图片上传：默认 1MB 对封面图不够，Node 侧也没有限制单文件大小
+      max-file-size: 20MB
+      max-request-size: 25MB
 
 mybatis-plus:
   configuration:

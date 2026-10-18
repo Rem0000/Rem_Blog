@@ -75,6 +75,7 @@ spring:
 | message | `add`（5 次）/ `update`（5 次）/ `delete`（5 次）/ `backDelete` / `like`（5 次）/ `cancelLike`（5 次）/ `getMessageList` / `getAllMessage` / `getHotTagList` | ✅ |
 | talk | `publishTalk` / `updateTalk` / `deleteTalkById` / `togglePublic` / `toggleTop` / `revertTalk` / `getTalkList` / `getTalkById` / `like`（5 次）/ `cancelLike`（5 次）/ `blogGetTalkList` | ✅ |
 | photo / photoAlbum | `photo/add` / `photo/delete` / `photo/revert` / `photo/getPhotoListByAlbumId` / `photo/getAllPhotosByAlbumId`；`photoAlbum/add` / `delete` / `update` / `/`（分页）/ `getAllAlbumList` | ✅ |
+| utils / 根路由 | `POST /upload/img`（1 分钟 100 次）；`GET /` 欢迎页 | ✅（qiniu/minio 待配置） |
 | comment / message / talk / photo / chat / 上传 | — | ⬜ 待做 |
 
 **首页闭环已通**：`config` + `category` + `tag` + `pageHeader` + `statistic` + `user` + 文章列表，前台首页不再有 404。
@@ -137,8 +138,10 @@ spring:
 - **说说删除的返回类型不统一**：进回收站（status 1/2）返回 `[count]`（Sequelize update 数组），永久删除（status 3）返回数字 `count`；已照抄。
 - **相册/图片删除的返回类型同理不统一**：图片 `type=1` 回收站返回 `[count]`、`type=2` 返回数字；相册删除返回 boolean。
 - **相册分页路径是 `/photoAlbum/`**（带斜杠），Controller 用 `@PostMapping({"", "/"})` 同时兼容。
+- **上传四模式现状**：`local` 已完整实现（落盘 `upload/local`，通过 `/local/**` 静态访问，URL 形如 `http://127.0.0.1:8088/local/xxx`）；`online` 落盘 `upload/online` 并返回 `/online/**` 的 URL（Node 的 online 分支没写 body，是 404，这里补成可用）；`qiniu` / `minio` 需要 ACCESSKEY/SECRETKEY/BUCKET，未配置时返回 `100006`「当前上传模式未配置」。
+- **上传目录按进程 cwd 解析**：`upload/local` 相对启动目录（与 Node 的 `__dirname/upload` 不同），部署时请固定工作目录或改成绝对路径。
 - **限流基础设施已就绪**：`@RateLimit` + 进程内固定窗口（`limit/RateLimitStore`、`limit/RateLimitInterceptor`），已挂在 `/links/add`（1 分钟 5 次）。超限行为与现网实测一致：429 + `{"message":"新增过于频繁 请稍后再试"}` + `X-Ratelimit-Limit/Remaining/Reset` + `Retry-After`。`/config/addView`（60 分钟 100 次）和全局 200 次/分钟尚未挂上，切流前必须补。
-- **上传未实现**：`/config/update` 里删除旧图的那段逻辑依赖上传模块，暂时跳过。
+- **上传未实现（仅 config/update 的删图）**：`/config/update` 里按 `UPLOADTYPE` 删除旧图的逻辑依赖具体存储实现，暂时跳过；上传接口本身已实现 local/online。
 
 ## 验证建议
 
@@ -209,6 +212,8 @@ curl -s -X POST http://127.0.0.1:8088/category/getCategoryList \
 | `talk` 置顶/公开/恢复/点赞/删除 | ✅ 文案按目标状态取名；回收返回 `[1]`、永久删除返回 `1`；点赞走 like_times 自增，不写 blog_like |
 | `photo` 增删查 | ✅ `bulkCreate` 返回创建行数组；`type=1` 返回 `[count]`、`type=2` 返回数字；`getAllPhotosByAlbumId` 只出 status=1 且按创建时间倒序 |
 | `photoAlbum` 增删改查 | ✅ 名称唯一（改时排除自己）；删除相册连带删图片；分页 `{current,size,list,total}`、全量按创建时间倒序 |
+| `POST /upload/img` | ✅ multipart 字段 `file`，local 模式返回 `{url}` 且该 URL 可直接 200 访问；空文件 500/`100006`；1 分钟 100 次限流 |
+| `GET /` | ✅ `text/plain` 欢迎语，与原实现一致 |
 
 > **踩过的坑**：`ArticleListItem` 一开始只写了 `@JsonProperty("createdAt")`，漏了
 > `@JsonFormat(pattern = "yyyy-MM-dd HH:mm:ss")`，结果输出成 `2026-10-18T19:09:39`。

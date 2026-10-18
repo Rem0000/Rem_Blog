@@ -6,6 +6,7 @@ import lombok.RequiredArgsConstructor;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.web.servlet.config.annotation.CorsRegistry;
 import org.springframework.web.servlet.config.annotation.InterceptorRegistry;
+import org.springframework.web.servlet.config.annotation.ResourceHandlerRegistry;
 import org.springframework.web.servlet.config.annotation.WebMvcConfigurer;
 
 @Configuration
@@ -32,5 +33,21 @@ public class WebMvcConfig implements WebMvcConfigurer {
                 .allowedHeaders("*")
                 .allowCredentials(true)
                 .maxAge(3600);
+    }
+
+    @Override
+    public void addResourceHandlers(ResourceHandlerRegistry registry) {
+        // 上传后的静态访问，对应 Node 的 koa-static(upload)：
+        //   /local/xxx  -> upload/local/xxx
+        //   /online/xxx -> upload/online/xxx
+        registry.addResourceHandler("/local/**").addResourceLocations(dirUri("upload", "local"));
+        registry.addResourceHandler("/online/**").addResourceLocations(dirUri("upload", "online"));
+    }
+
+    /** 目录 -> file: URI，确保以 / 结尾（否则 addResourceLocations 会拼错路径） */
+    private static String dirUri(String first, String second) {
+        String uri = java.nio.file.Paths.get(first, second).toAbsolutePath().normalize()
+                .toUri().toString();
+        return uri.endsWith("/") ? uri : uri + "/";
     }
 }
