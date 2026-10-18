@@ -72,6 +72,7 @@ spring:
 | links | `add`（1 分钟 5 次限流）/ `frontUpdate` / `backUpdate` / `delete` / `approve` / `getLinksList` | ✅ |
 | like / notify | `like/addLike`（1 分钟 10 次）/ `like/cancelLike`（1 分钟 10 次）/ `like/getIsLikeByIdOrIpAndType` / `notify/update` / `notify/delete` / `notify/getNotifyList` | ✅ |
 | comment | `add`（1 分钟 20 次）/ `apply`（1 分钟 20 次）/ `thumbUp`（10 次）/ `cancelCommentLike`（10 次）/ `delete` / `backDelete` / `backGetCommentList` / `frontGetParentComment` / `frontGetChildrenComment` / `getCommentTotal` | ✅ |
+| message | `add`（5 次）/ `update`（5 次）/ `delete`（5 次）/ `backDelete` / `like`（5 次）/ `cancelLike`（5 次）/ `getMessageList` / `getAllMessage` / `getHotTagList` | ✅ |
 | comment / message / talk / photo / chat / 上传 | — | ⬜ 待做 |
 
 **首页闭环已通**：`config` + `category` + `tag` + `pageHeader` + `statistic` + `user` + 文章列表，前台首页不再有 404。
@@ -128,6 +129,8 @@ spring:
 - **评论后台的 from_name/to_name 过滤修正**：原实现把列名写成了不存在的 `name`，一旦传这两个筛选就 500；这里改成按 `from_name` / `to_name` 列 like 查询。
 - **评论错误码照抄原实现的 bug**：`controller/comment` 里 `errorCode` 用的是 `ERRORCODE.CATEGORY`（100004），不是 COMMENT（100015），评论相关错误现在仍返回 100004。
 - **评论出参里的 `form_name`**：原实现把 `from_name` 拼成了 `form_name`，前端评论列表真的在读这个 key，所以保留；`is_like` 只在点赞状态场景出现。
+- **`message/getHotTagList` 现网是 404**：本地 Node 源码里有这个路由，但线上部署版本没有（实测 `GET http://mrzym.top/api/message/getHotTagList` 返回 404）。这里按源码实现成可用接口，前端目前也没依赖 404。
+- **留言游客昵称**：原实现 `randomNickname("游客", 5)`；这里生成「游客 + 5 位数字/字母」，前缀和长度一致。
 - **限流基础设施已就绪**：`@RateLimit` + 进程内固定窗口（`limit/RateLimitStore`、`limit/RateLimitInterceptor`），已挂在 `/links/add`（1 分钟 5 次）。超限行为与现网实测一致：429 + `{"message":"新增过于频繁 请稍后再试"}` + `X-Ratelimit-Limit/Remaining/Reset` + `Retry-After`。`/config/addView`（60 分钟 100 次）和全局 200 次/分钟尚未挂上，切流前必须补。
 - **上传未实现**：`/config/update` 里删除旧图的那段逻辑依赖上传模块，暂时跳过。
 
@@ -191,6 +194,9 @@ curl -s -X POST http://127.0.0.1:8088/category/getCategoryList \
 | `comment` 前台列表 | ✅ 父级按 `parent_id IS NULL`、`new` 按时间否则按点赞；子级按 `parent_id` + 时间升序；出参含 `ipAddress`/`form_name`/`is_like`，`is_like` 按登录用户或 IP 判定 |
 | `comment` 后台列表/总数 | ✅ 含 `ipAddress`，用当前用户资料覆盖 `from_avatar`/`to_avatar`/`form_name`；content/from_name/to_name/time 过滤均通过 |
 | `comment` 删除/点赞 | ✅ 父评论连带删子评论、子评论只删自己；点赞/取消同步 `thumbs_up` 并刷新 `updated_at`；错误码为 100004（原实现 bug） |
+| `message` 新增 | ✅ 游客自动生成「游客xxxxx」、内容过敏感词；`user_id != 1` 时给博主写 type=3 通知；返回 `发布成功` |
+| `message` 列表 | ✅ 字段顺序/`avatar`/`is_like`/`comment_total` 与现网一致；支持 tag/message/time 过滤；`getAllMessage` 只带 `avatar` |
+| `message` 点赞/改删 | ✅ 点赞数刷新 `updated_at`；`update`/`delete`/`backDelete` 鉴权与限流符合路由定义；热门标签按 count 倒序前 10 |
 
 > **踩过的坑**：`ArticleListItem` 一开始只写了 `@JsonProperty("createdAt")`，漏了
 > `@JsonFormat(pattern = "yyyy-MM-dd HH:mm:ss")`，结果输出成 `2026-10-18T19:09:39`。
