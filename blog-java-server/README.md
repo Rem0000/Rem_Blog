@@ -67,7 +67,7 @@ spring:
 | tag | `add` / `update` / `delete` / `getTagList` / `getTagDictionary` | ✅ |
 | pageHeader | `GET /pageHeader/getAll`、`POST /pageHeader/addOrUpdate`、`POST /pageHeader/delete` | ✅ |
 | statistic | `GET /statistic` | ✅ |
-| user | `GET /user/getUserInfoById/{id}` | ⚠️ 只做了信息查询，登录/注册/改密未做 |
+| user | `register`（1 分钟 3 次限流）/ `login` / `updateOwnUserInfo` / `updatePassword` / `updateRole` / `adminUpdateUserInfo` / `getUserList` / `getUserInfoById` | ✅ |
 | article | 首页 / 时间轴 / 详情 / 增删改 / 置顶 / 公开私密 / 标题查重 / 按标签 / 按分类 / 推荐 / 搜索 / 热门 / 点赞 / 阅读时长 / updateUrl，共 20 个 | ✅ |
 | links | `add`（1 分钟 5 次限流）/ `frontUpdate` / `backUpdate` / `delete` / `approve` / `getLinksList` | ✅ |
 | comment / message / talk / photo / chat / 上传 | — | ⬜ 待做 |
@@ -120,6 +120,9 @@ spring:
 - **文章按标签筛选修正了原实现的退化**：`getArticleList` 传了一个没有任何文章的 `tag_id` 时，Node 会因为 `articleIdList` 为 null 跳过过滤，把全部文章返回；这里按语义返回空列表。
 - **`article/updateUrl` 修正为可用**：原实现把 service 直接当 handler 用、没有设置 `ctx.body`，现网访问是 404 空响应；这里补成真正执行封面域名替换并返回受影响行数。
 - **首页/时间轴的 current/size 回显字符串**：现网是路径参数，响应里是 `"1"`/`"2"`；首页实现之前回显的是数字，已一并对齐。
+- **IP 属地库未接**：Node 用 `xz-ipnet` 把 IP 转成省份；Java 侧暂未引入离线库。`IpUtil.locate` 目前对“库里的值是 IP”统一返回「本机地址」（与 Node 查不到归属时的兜底一致），对历史数据里已经是「四川」这种属地文本的原样返回。接 `ip2region` 后只需改 `IpUtil.locate`。
+- **昵称敏感词兜底改为内置短语**：Node 命中敏感词/脚本关键字后会去 iciba 接口取「每日一句」（依赖外网）；这里用内置短语，避免注册被外部接口拖死。
+- **头像/封面远程删除未接**：`updateOwnUserInfo`、`adminUpdateUserInfo`、`article/update` 里 qiniu/minio 模式的删图逻辑依赖上传模块，暂时只打日志，等 utils 上传一起补。
 - **限流基础设施已就绪**：`@RateLimit` + 进程内固定窗口（`limit/RateLimitStore`、`limit/RateLimitInterceptor`），已挂在 `/links/add`（1 分钟 5 次）。超限行为与现网实测一致：429 + `{"message":"新增过于频繁 请稍后再试"}` + `X-Ratelimit-Limit/Remaining/Reset` + `Retry-After`。`/config/addView`（60 分钟 100 次）和全局 200 次/分钟尚未挂上，切流前必须补。
 - **上传未实现**：`/config/update` 里删除旧图的那段逻辑依赖上传模块，暂时跳过。
 
@@ -172,6 +175,11 @@ curl -s -X POST http://127.0.0.1:8088/category/getCategoryList \
 | `POST /article/getArticleList` | ✅ 需登录；默认 `status in (1,2)`，排除 `article_content`/`origin_url`，标题/置顶/状态/分类/标签/时间筛选均通过 |
 | 文章增删改 | ✅ 标题查重、分类按名新建、标签按名新建并重建关联；`delete/{id}/1` 进回收站、`/3` 永久删除并清关联；返回结构 `{article,articleTagList}` / `{res,newArticleTagList}` |
 | 置顶/公开/恢复/点赞/阅读时长 | ✅ 消息文案与现网一致（含 `isPublic` 按“当前状态”取名），阅读时长按毫秒累加 |
+| `POST /user/register` | ✅ 用户名仅字母数字、admin 保留、重复校验；密码落库为 `$2a$10$` bcrypt（60 位）；返回 `{id,username}`；1 分钟 3 次限流 |
+| `POST /user/login` | ✅ 普通用户/超管两条分支；超管返回 `{token,username:"超级管理员",role:1,id:5201314}`，普通用户多 `ipAddress`；错误文案 = 用户名不存在/密码不匹配/密码错误 |
+| 改资料 / 改密码 | ✅ `updatePassword` 校验两次一致、旧密码匹配、id=2 保护；改完可用新密码登录 |
+| `getUserList` | ✅ 需登录；`ip` 原样 + `ip_address` 追加（注意是下划线），role 仅在数字非 0 时过滤 |
+| `getUserInfoById/5201314` | ✅ 只回 `{id,role,nick_name:"超级管理员"}`；普通用户回 `ipAddress` 驼峰 |
 
 > **踩过的坑**：`ArticleListItem` 一开始只写了 `@JsonProperty("createdAt")`，漏了
 > `@JsonFormat(pattern = "yyyy-MM-dd HH:mm:ss")`，结果输出成 `2026-10-18T19:09:39`。
