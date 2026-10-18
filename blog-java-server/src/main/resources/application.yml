@@ -1,0 +1,55 @@
+server:
+  port: ${APP_PORT:8888}
+  servlet:
+    encoding:
+      charset: UTF-8
+      force: true
+
+spring:
+  application:
+    name: blog-server
+  datasource:
+    driver-class-name: com.mysql.cj.jdbc.Driver
+    url: jdbc:mysql://${MYSQL_HOST:127.0.0.1}:${MYSQL_PORT:3306}/${MYSQL_DB:online_blog}?useUnicode=true&characterEncoding=utf8&serverTimezone=Asia/Shanghai&useSSL=false&allowPublicKeyRetrieval=true&zeroDateTimeBehavior=convertToNull
+    username: ${MYSQL_USER:root}
+    password: ${MYSQL_PASSWORD:12345678}
+    hikari:
+      maximum-pool-size: 20
+      minimum-idle: 5
+      connection-timeout: 30000
+  jackson:
+    time-zone: Asia/Shanghai
+    # 全局下划线命名：Java 驼峰字段 -> JSON 下划线，与数据库列名一致
+    property-naming-strategy: SNAKE_CASE
+    # 不要配置 non_null：现网会把 null 字段原样返回，省略会破坏契约
+    serialization:
+      write-dates-as-timestamps: false
+
+mybatis-plus:
+  configuration:
+    # 关键：blog_name -> blogName，而 createdAt 这种本来就没下划线的保持原样
+    map-underscore-to-camel-case: true
+    log-impl: org.apache.ibatis.logging.stdout.StdOutImpl
+  global-config:
+    banner: false
+    db-config:
+      id-type: auto
+      table-underline: true
+
+blog:
+  jwt-secret: ${JWT_SECRET:blog}
+  # 内置超管账号 admin 的密码；为空时 admin 无法登录（与原实现一致）
+  admin-password: ${ADMIN_PASSWORD:}
+  # local / minio / qiniu / online
+  upload-type: ${UPLOADTYPE:local}
+
+springdoc:
+  swagger-ui:
+    path: /swagger
+  api-docs:
+    path: /v3/api-docs
+
+logging:
+  level:
+    root: info
+    com.mrzym.blog: debug

@@ -1,0 +1,22 @@
+[Unit]
+Description=Blog Server (Koa + Sequelize)
+Documentation=https://gitee.com/mrzym/stable-version-of-blog
+After=network.target mysql.service
+Wants=mysql.service
+
+[Service]
+Type=simple
+User=www-data
+Group=www-data
+WorkingDirectory=/opt/blog/blog-server
+ExecStart=/usr/bin/node app.js
+Restart=always
+RestartSec=3
+StandardOutput=append:/var/log/blog-server/out.log
+StandardError=append:/var/log/blog-server/err.log
+Environment=NODE_ENV=production
+# 若用 nvm 安装的 Node，把 ExecStart 换成绝对路径，例如：
+# ExecStart=/home/blog/.nvm/versions/node/v18.20.4/bin/node app.js
+
+[Install]
+WantedBy=multi-user.target

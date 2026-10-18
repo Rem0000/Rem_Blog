@@ -1,0 +1,37 @@
+# ---------- 依赖与构建产物 ----------
+node_modules/
+dist/
+dist-ssr/
+target/
+*.jar
+*.war
+*.class
+
+# 部署脚本构建出来的前端产物
+blog-server/ui/
+
+# ---------- 日志 ----------
+logs/
+*.log
+npm-debug.log*
+pnpm-debug.log*
+
+# ---------- 环境变量与密钥 ----------
+.env
+.env.local
+*.pem
+*.key
+
+# ---------- IDE / 系统 ----------
+.idea/
+*.iml
+.DS_Store
+Thumbs.db
+
+# ---------- 运行时上传 ----------
+blog-server/src/upload/local/
+blog-server/src/upload/online/
+
+# ---------- 其他 ----------
+*.tsbuildinfo
+.eslintcache
