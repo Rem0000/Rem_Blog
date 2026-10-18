@@ -114,8 +114,9 @@ public class LinkService {
      * 分页查询。入参/出参都是 current / size（现网契约）。
      */
     public CurrentPageResult<LinkEntity> getLinksList(LinkQuery query) {
-        Object rawCurrent = query.getCurrent();
-        Object rawSize = query.getSize();
+        // current/size 优先；没有时兼容 page/pageSize 写法
+        Object rawCurrent = query.getCurrent() != null ? query.getCurrent() : query.getPage();
+        Object rawSize = query.getSize() != null ? query.getSize() : query.getPageSize();
 
         int current = Math.max(Num.toInt(rawCurrent, 1), 1);
         int size = Num.toInt(rawSize, 10);

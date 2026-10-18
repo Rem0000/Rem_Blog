@@ -86,7 +86,8 @@ spring:
 
 > **分页现状（重要）**：body 分页并非所有接口都是 `page`/`pageSize`。
 > `links/getLinksList` 的现网契约是 **`current`/`size`**（前台 `link-list.vue`、后台 `links/index.ts` 都在传），
-> 响应是 `{current, size, list, total}`，已实测 `mrzym.top` 同此，所以 links 按现网实现。
+> 响应是 `{current, size, list, total}`，已实测 `mrzym.top` 同此，所以 links 按现网实现；
+> 入参同时兼容 `page`/`pageSize` 别名（两者都有时以 `current`/`size` 为准）。
 > category / tag 目前用的是 `page`/`pageSize`，与前端实际发送的 `current`/`size` 不一致
 > （第 2 页起会拿不到数据），后续统一前必须先确认前端改法。
 
