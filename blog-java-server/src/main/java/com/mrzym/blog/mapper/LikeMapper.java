@@ -11,21 +11,21 @@ import org.apache.ibatis.annotations.Update;
  */
 public interface LikeMapper extends BaseMapper<LikeEntity> {
 
-    @Update("UPDATE blog_talk SET like_times = like_times + 1 WHERE id = #{id}")
+    @Update("UPDATE blog_talk SET like_times = like_times + 1, updated_at = NOW() WHERE id = #{id}")
     int increaseTalkLike(@Param("id") Integer id);
 
-    @Update("UPDATE blog_talk SET like_times = like_times - 1 WHERE id = #{id}")
+    @Update("UPDATE blog_talk SET like_times = like_times - 1, updated_at = NOW() WHERE id = #{id}")
     int decreaseTalkLike(@Param("id") Integer id);
 
-    @Update("UPDATE blog_message SET like_times = like_times + 1 WHERE id = #{id}")
+    @Update("UPDATE blog_message SET like_times = like_times + 1, updated_at = NOW() WHERE id = #{id}")
     int increaseMessageLike(@Param("id") Integer id);
 
-    @Update("UPDATE blog_message SET like_times = like_times - 1 WHERE id = #{id}")
+    @Update("UPDATE blog_message SET like_times = like_times - 1, updated_at = NOW() WHERE id = #{id}")
     int decreaseMessageLike(@Param("id") Integer id);
 
-    @Update("UPDATE blog_comment SET thumbs_up = thumbs_up + 1 WHERE id = #{id}")
+    @Update("UPDATE blog_comment SET thumbs_up = thumbs_up + 1, updated_at = NOW() WHERE id = #{id}")
     int increaseCommentLike(@Param("id") Integer id);
 
-    @Update("UPDATE blog_comment SET thumbs_up = thumbs_up - 1 WHERE id = #{id}")
+    @Update("UPDATE blog_comment SET thumbs_up = thumbs_up - 1, updated_at = NOW() WHERE id = #{id}")
     int decreaseCommentLike(@Param("id") Integer id);
 }

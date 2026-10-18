@@ -71,6 +71,7 @@ spring:
 | article | 首页 / 时间轴 / 详情 / 增删改 / 置顶 / 公开私密 / 标题查重 / 按标签 / 按分类 / 推荐 / 搜索 / 热门 / 点赞 / 阅读时长 / updateUrl，共 20 个 | ✅ |
 | links | `add`（1 分钟 5 次限流）/ `frontUpdate` / `backUpdate` / `delete` / `approve` / `getLinksList` | ✅ |
 | like / notify | `like/addLike`（1 分钟 10 次）/ `like/cancelLike`（1 分钟 10 次）/ `like/getIsLikeByIdOrIpAndType` / `notify/update` / `notify/delete` / `notify/getNotifyList` | ✅ |
+| comment | `add`（1 分钟 20 次）/ `apply`（1 分钟 20 次）/ `thumbUp`（10 次）/ `cancelCommentLike`（10 次）/ `delete` / `backDelete` / `backGetCommentList` / `frontGetParentComment` / `frontGetChildrenComment` / `getCommentTotal` | ✅ |
 | comment / message / talk / photo / chat / 上传 | — | ⬜ 待做 |
 
 **首页闭环已通**：`config` + `category` + `tag` + `pageHeader` + `statistic` + `user` + 文章列表，前台首页不再有 404。
@@ -124,6 +125,9 @@ spring:
 - **IP 属地库未接**：Node 用 `xz-ipnet` 把 IP 转成省份；Java 侧暂未引入离线库。`IpUtil.locate` 目前对“库里的值是 IP”统一返回「本机地址」（与 Node 查不到归属时的兜底一致），对历史数据里已经是「四川」这种属地文本的原样返回。接 `ip2region` 后只需改 `IpUtil.locate`。
 - **昵称敏感词兜底改为内置短语**：Node 命中敏感词/脚本关键字后会去 iciba 接口取「每日一句」（依赖外网）；这里用内置短语，避免注册被外部接口拖死。
 - **头像/封面远程删除未接**：`updateOwnUserInfo`、`adminUpdateUserInfo`、`article/update` 里 qiniu/minio 模式的删图逻辑依赖上传模块，暂时只打日志，等 utils 上传一起补。
+- **评论后台的 from_name/to_name 过滤修正**：原实现把列名写成了不存在的 `name`，一旦传这两个筛选就 500；这里改成按 `from_name` / `to_name` 列 like 查询。
+- **评论错误码照抄原实现的 bug**：`controller/comment` 里 `errorCode` 用的是 `ERRORCODE.CATEGORY`（100004），不是 COMMENT（100015），评论相关错误现在仍返回 100004。
+- **评论出参里的 `form_name`**：原实现把 `from_name` 拼成了 `form_name`，前端评论列表真的在读这个 key，所以保留；`is_like` 只在点赞状态场景出现。
 - **限流基础设施已就绪**：`@RateLimit` + 进程内固定窗口（`limit/RateLimitStore`、`limit/RateLimitInterceptor`），已挂在 `/links/add`（1 分钟 5 次）。超限行为与现网实测一致：429 + `{"message":"新增过于频繁 请稍后再试"}` + `X-Ratelimit-Limit/Remaining/Reset` + `Retry-After`。`/config/addView`（60 分钟 100 次）和全局 200 次/分钟尚未挂上，切流前必须补。
 - **上传未实现**：`/config/update` 里删除旧图的那段逻辑依赖上传模块，暂时跳过。
 
@@ -183,6 +187,10 @@ curl -s -X POST http://127.0.0.1:8088/category/getCategoryList \
 | `getUserInfoById/5201314` | ✅ 只回 `{id,role,nick_name:"超级管理员"}`；普通用户回 `ipAddress` 驼峰 |
 | `like` 三个接口 | ✅ 登录用户按 `user_id`、游客按 `ip` 维度判重；重复/未点赞错误文案与现网一致；点赞数同步到文章 `thumbs_up_times`、说说/留言 `like_times`、评论 `thumbs_up` |
 | `notify` 三个接口 | ✅ 列表按 `is_view` 升序 + `created_at` 倒序，`userId` 驼峰入参；已阅返回 boolean；删除返回 `{res:条数}` |
+| `comment` 新增/回复 | ✅ 内容过敏感词、IP 落库；`from_id != author_id` / `!= to_id` 时写 `blog_notify`，文案与现网一致 |
+| `comment` 前台列表 | ✅ 父级按 `parent_id IS NULL`、`new` 按时间否则按点赞；子级按 `parent_id` + 时间升序；出参含 `ipAddress`/`form_name`/`is_like`，`is_like` 按登录用户或 IP 判定 |
+| `comment` 后台列表/总数 | ✅ 含 `ipAddress`，用当前用户资料覆盖 `from_avatar`/`to_avatar`/`form_name`；content/from_name/to_name/time 过滤均通过 |
+| `comment` 删除/点赞 | ✅ 父评论连带删子评论、子评论只删自己；点赞/取消同步 `thumbs_up` 并刷新 `updated_at`；错误码为 100004（原实现 bug） |
 
 > **踩过的坑**：`ArticleListItem` 一开始只写了 `@JsonProperty("createdAt")`，漏了
 > `@JsonFormat(pattern = "yyyy-MM-dd HH:mm:ss")`，结果输出成 `2026-10-18T19:09:39`。
