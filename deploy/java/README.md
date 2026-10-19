@@ -128,6 +128,10 @@ bash deploy/setup-java-docker.sh
 3. 校验 compose 配置，`docker compose up -d --build`；
 4. 轮询 `http://127.0.0.1:8888/config`，就绪后打印访问地址和超管密码。
 
+> Nginx 镜像固定为 `nginx:1.31.2-alpine`。**1.31.3+ 在 CentOS 7 + Docker CE 26 上写
+> `/run/nginx.pid` 会 `EPERM`，容器进入重启循环**，见官方 issue
+> [#1059](https://github.com/nginx/docker-nginx/issues/1059)。不要改回 `nginx:alpine` 浮标签。
+
 访问：
 
 - 前台 `http://<IP>/`
@@ -450,6 +454,7 @@ curl -sI http://127.0.0.1/admin/                # 后台
 | 页面白屏/404 静态资源 | `ui/blog/dist/index.html` 是否为空；Docker nginx root 是 `.../blog/dist`，手工是 `/var/www/blog/blog` |
 | `/admin/` 404 | 没有构建 admin；`bash deploy/build-frontends.sh`（需要 pnpm 7） |
 | 上传返回 100006 | `UPLOADTYPE` 与 OSS/本地配置不匹配；Java 不支持 qiniu/minio |
+| nginx 反复重启，日志 `pwrite() "/run/nginx.pid" failed (1: Operation not permitted)` | 镜像缺陷：固定 `nginx:1.31.2-alpine`；1.31.3+ 在 CentOS 7 + Docker CE 26 有此问题（[issue #1059](https://github.com/nginx/docker-nginx/issues/1059)） |
 | Maven 构建 OOM | `MAVEN_OPTS=-Xmx1536m`，或给虚拟机加内存；Docker 构建已限制 768m |
 | 后台登录 token 老失效 | 切换后 `JWT_SECRET` 变了；要和旧环境互认就沿用旧值 |
 | 访问几百次后整站 429 | 限流按 `remoteAddress` 计数；经过 nginx 时所有请求看起来都来自代理 IP。生产可加 `SERVER_FORWARD_HEADERS_STRATEGY=native` 让 Tomcat 读 `X-Forwarded-For`（会偏离现网行为，评估后再用） |

@@ -85,7 +85,9 @@ services:
       - blog-network
 
   nginx:
-    image: nginx:alpine
+    # 固定 1.31.2：1.31.3+ 在 CentOS 7 + Docker CE 26 上写 /run/nginx.pid 会 EPERM
+    # 官方 issue：https://github.com/nginx/docker-nginx/issues/1059
+    image: nginx:1.31.2-alpine
     restart: unless-stopped
     depends_on:
       blog-java-server:

@@ -73,6 +73,10 @@ docker compose --env-file .env logs -f blog-java-server
 
 相关文件：`deploy/java/Dockerfile`、`docker-compose.yml`、`nginx.conf`、`.env.example`。
 
+> Nginx 镜像固定为 `nginx:1.31.2-alpine`。1.31.3+ 在 CentOS 7 + Docker CE 26 上写
+> `/run/nginx.pid` 会报 `Operation not permitted` 并进入重启循环，见
+> [docker-nginx issue #1059](https://github.com/nginx/docker-nginx/issues/1059)。不要改回 `nginx:alpine` 浮标签。
+
 数据库：
 
 - MySQL 8.0 容器，库名默认 `online_blog`，应用账号默认 `blog`；
