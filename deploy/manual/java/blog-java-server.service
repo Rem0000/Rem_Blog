@@ -1,0 +1,26 @@
+[Unit]
+Description=Blog Server (Java / Spring Boot)
+Documentation=https://gitee.com/mrzym/stable-version-of-blog
+After=network-online.target mysql.service
+Wants=network-online.target mysql.service
+
+[Service]
+Type=simple
+User=www-data
+Group=www-data
+WorkingDirectory=/opt/blog
+# 由 deploy/setup-java-manual.sh 生成；手工部署时把变量写进这个文件
+EnvironmentFile=/etc/blog-java/blog-java.env
+ExecStart=/usr/bin/java $JAVA_OPTS -jar /opt/blog/blog-server.jar
+Restart=always
+RestartSec=5
+TimeoutStopSec=30
+# JVM 收到 SIGTERM 后正常退出时是 143，避免 systemd 误判为失败
+SuccessExitStatus=143
+# 自动创建 /var/log/blog-java 并归属 www-data
+LogsDirectory=blog-java
+StandardOutput=append:/var/log/blog-java/out.log
+StandardError=append:/var/log/blog-java/err.log
+
+[Install]
+WantedBy=multi-user.target

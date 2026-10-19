@@ -1,0 +1,16 @@
+# Java 后端镜像的构建上下文是 my-blog/（见 deploy/java/docker-compose.yml）。
+# 这里只保留 blog-java-server 源码和 deploy/java 构建配置，其余全部排除，
+# 避免把 node_modules / target / 前端产物 / 本地密钥传给 Docker daemon。
+.git
+.idea
+**/node_modules
+**/target
+blog-v3
+blog-v3-admin
+ui
+upload
+**/*.log
+**/.DS_Store
+**/.env
+**/.env.*
+blog-java-server/src/main/resources/application-local.yml

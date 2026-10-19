@@ -1,12 +1,12 @@
 #!/usr/bin/env bash
-# 构建博客前台（必选）与后台管理端（可选），产物落到 blog-server/ui/{blog,admin}/dist，
-# 以匹配 blog-server/docker-compose.yml 里的 nginx 挂载路径。
+# 构建博客前台（必选）与后台管理端（可选），产物落到 ui/{blog,admin}/dist。
+# Docker/手工部署都从这个目录取前端产物。
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 BLOG="$ROOT/blog-v3"
 ADMIN="$ROOT/blog-v3-admin"
-OUT="$ROOT/blog-server/ui"
+OUT="$ROOT/ui"
 REGISTRY="${NPM_REGISTRY:-https://registry.npmmirror.com}"
 
 say() { printf '\n\033[1;36m==> %s\033[0m\n' "$*"; }
@@ -34,7 +34,7 @@ npm run build
 mkdir -p "$OUT/blog"
 rm -rf "$OUT/blog/dist"
 cp -r "$BLOG/dist" "$OUT/blog/dist"
-say "前台产物 -> blog-server/ui/blog/dist ($(find "$OUT/blog/dist" -type f | wc -l) 个文件)"
+say "前台产物 -> ui/blog/dist ($(find "$OUT/blog/dist" -type f | wc -l) 个文件)"
 
 # ---------- 后台管理端（可选）----------
 if [ "${SKIP_ADMIN:-0}" = "1" ]; then
@@ -64,4 +64,4 @@ pnpm build || die "管理端构建失败（可设 SKIP_ADMIN=1 先只部署前�
 mkdir -p "$OUT/admin"
 rm -rf "$OUT/admin/dist"
 cp -r "$ADMIN/dist" "$OUT/admin/dist"
-say "管理端产物 -> blog-server/ui/admin/dist ($(find "$OUT/admin/dist" -type f | wc -l) 个文件)"
+say "管理端产物 -> ui/admin/dist ($(find "$OUT/admin/dist" -type f | wc -l) 个文件)"

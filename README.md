@@ -11,7 +11,9 @@
 
 前端主要技术：Vue3、ELement-Plus、Vue-router、Pinia、Tailwind.css、Sass、Animate.css
 
-后端主要技术：Node.js、Koa、Koa-router、Seqlize、Mysql
+后端主要技术：Java 17、Spring Boot 3、MyBatis-Plus、MySQL
+
+> 原 Node/Koa 版后端已移除，仓库现在只保留 Java 后端和两个前端。部署见 [`deploy/README.md`](deploy/README.md)。
 
 此项目包括博客后台、前台的稳定版本代码，后续的开发不会在这上面改动
 如果有兴趣的小伙伴，可以自行开发

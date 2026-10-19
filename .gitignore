@@ -8,7 +8,7 @@ target/
 *.class
 
 # 部署脚本构建出来的前端产物
-blog-server/ui/
+ui/
 
 # ---------- 日志 ----------
 logs/
@@ -32,8 +32,7 @@ application-*.local.yml
 Thumbs.db
 
 # ---------- 运行时上传 ----------
-blog-server/src/upload/local/
-blog-server/src/upload/online/
+upload/
 
 # ---------- 其他 ----------
 *.tsbuildinfo
