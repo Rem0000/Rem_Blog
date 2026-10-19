@@ -32,7 +32,7 @@ export const deleteCategoryList = (data?: object) => {
 export const getCategoryDictionary = () => {
   return http.request<CategoryResult>(
     "get",
-    "/api/Category/getCategoryDictionary",
+    "/api/category/getCategoryDictionary",
     {}
   );
 };

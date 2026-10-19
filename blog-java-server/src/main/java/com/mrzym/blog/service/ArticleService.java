@@ -62,6 +62,7 @@ public class ArticleService {
     private final CategoryMapper categoryMapper;
     private final TagMapper tagMapper;
     private final UserMapper userMapper;
+    private final OssService ossService;
 
     // ==================== 读 ====================
 
@@ -386,6 +387,7 @@ public class ArticleService {
         Integer id = Num.toInteger(form.getId());
         // 截到秒：MySQL DATETIME 会把毫秒四舍五入，内存值与落库值会差 1 秒
         LocalDateTime now = LocalDateTime.now().withNano(0);
+        ArticleEntity old = id == null ? null : articleMapper.selectById(id);
 
         // 先删旧关联
         articleTagMapper.delete(new LambdaQueryWrapper<ArticleTagEntity>()
@@ -407,6 +409,9 @@ public class ArticleService {
         entity.setOriginUrl(form.getOriginUrl());
         entity.setUpdatedAt(now);
         int affected = articleMapper.updateById(entity);
+        if (affected > 0) {
+            deleteCoverIfUnused(old == null ? null : old.getArticleCover());
+        }
 
         List<ArticleTagLink> links = saveArticleTags(id, form.getTagList(), now);
 
@@ -414,6 +419,20 @@ public class ArticleService {
         result.setRes(affected > 0);
         result.setNewArticleTagList(links);
         return result;
+    }
+
+    /**
+     * 旧封面不再被任何文章引用时才删除 OSS 对象；外部/本地 URL 会被 OssService 自动跳过。
+     */
+    private void deleteCoverIfUnused(String cover) {
+        if (cover == null || cover.isBlank()) {
+            return;
+        }
+        Long refs = articleMapper.selectCount(new LambdaQueryWrapper<ArticleEntity>()
+                .eq(ArticleEntity::getArticleCover, cover));
+        if (refs == null || refs == 0) {
+            ossService.deleteByUrl(cover);
+        }
     }
 
     public boolean updateTop(Integer id, Integer isTop) {
@@ -428,9 +447,13 @@ public class ArticleService {
      */
     public boolean delete(Integer id, int status) {
         if (status == 3) {
+            ArticleEntity old = articleMapper.selectById(id);
             int affected = articleMapper.deleteById(id);
             articleTagMapper.delete(new LambdaQueryWrapper<ArticleTagEntity>()
                     .eq(ArticleTagEntity::getArticleId, id));
+            if (affected > 0) {
+                deleteCoverIfUnused(old == null ? null : old.getArticleCover());
+            }
             return affected > 0;
         }
         ArticleEntity entity = new ArticleEntity();

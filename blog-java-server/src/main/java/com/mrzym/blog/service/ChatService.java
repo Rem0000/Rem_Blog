@@ -31,6 +31,7 @@ public class ChatService {
 
     private final ChatMapper chatMapper;
     private final UserMapper userMapper;
+    private final OssService ossService;
 
     public ChatEntity create(ChatForm form) {
         LocalDateTime now = LocalDateTime.now().withNano(0);
@@ -45,11 +46,44 @@ public class ChatService {
     }
 
     public void deleteAll() {
+        List<ChatEntity> all = chatMapper.selectList(null);
         chatMapper.truncate();
+        List<String> contents = new ArrayList<>();
+        for (ChatEntity chat : all) {
+            if (isImage(chat)) {
+                contents.add(chat.getContent());
+            }
+        }
+        ossService.deleteByUrls(contents);
     }
 
     public int deleteOne(Integer id) {
-        return chatMapper.deleteById(id);
+        ChatEntity one = chatMapper.selectById(id);
+        int affected = chatMapper.deleteById(id);
+        if (affected > 0 && isImage(one)) {
+            deleteImageIfUnused(one.getContent());
+        }
+        return affected;
+    }
+
+    private static boolean isImage(ChatEntity chat) {
+        return chat != null
+                && "image".equalsIgnoreCase(chat.getContentType())
+                && chat.getContent() != null
+                && !chat.getContent().isBlank();
+    }
+
+    /** 聊天图片不再被任何聊天记录引用时才删除 OSS 对象 */
+    private void deleteImageIfUnused(String content) {
+        if (content == null || content.isBlank()) {
+            return;
+        }
+        Long refs = chatMapper.selectCount(new LambdaQueryWrapper<ChatEntity>()
+                .eq(ChatEntity::getContent, content)
+                .eq(ChatEntity::getContentType, "image"));
+        if (refs == null || refs == 0) {
+            ossService.deleteByUrl(content);
+        }
     }
 
     public ChatEntity getOne(Integer id) {

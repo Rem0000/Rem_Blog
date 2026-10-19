@@ -2,7 +2,6 @@ package com.mrzym.blog.service;
 
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
-import com.mrzym.blog.common.IpUtil;
 import com.mrzym.blog.common.Num;
 import com.mrzym.blog.common.SensitiveWordFilter;
 import com.mrzym.blog.dto.CommentAddForm;
@@ -46,6 +45,7 @@ public class CommentService {
     private final UserMapper userMapper;
     private final NotifyService notifyService;
     private final LikeService likeService;
+    private final IpLocationService ipLocationService;
 
     /** 新增父级评论 */
     public CommentEntity add(CommentAddForm form, String ip, String content) {
@@ -237,7 +237,7 @@ public class CommentService {
         for (CommentEntity row : rows) {
             CommentView view = new CommentView();
             BeanUtils.copyProperties(row, view);
-            view.setIpAddress(IpUtil.locate(row.getIp()));
+            view.setIpAddress(ipLocationService.locate(row.getIp()));
 
             UserEntity from = users.get(row.getFromId());
             if (from != null) {

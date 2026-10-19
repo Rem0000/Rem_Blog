@@ -23,6 +23,7 @@ import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
@@ -44,6 +45,7 @@ public class TalkService {
     private final TalkPhotoMapper talkPhotoMapper;
     private final UserMapper userMapper;
     private final LikeService likeService;
+    private final OssService ossService;
 
     public Integer publish(TalkForm form) {
         LocalDateTime now = LocalDateTime.now().withNano(0);
@@ -65,6 +67,7 @@ public class TalkService {
     public boolean update(TalkForm form) {
         Integer id = Num.toInteger(form.getId());
         LocalDateTime now = LocalDateTime.now().withNano(0);
+        List<String> oldUrls = photoUrls(id);
 
         TalkEntity patch = new TalkEntity();
         patch.setId(id);
@@ -77,6 +80,7 @@ public class TalkService {
 
         deletePhotos(id);
         savePhotos(id, form.getTalkImgList(), now);
+        deleteUnusedPhotoUrls(oldUrls);
         return affected > 0;
     }
 
@@ -91,8 +95,12 @@ public class TalkService {
 
     /** 永久删除 + 删图片关联，返回删除条数 */
     public int destroy(Integer id) {
+        List<String> oldUrls = photoUrls(id);
         int affected = talkMapper.deleteById(id);
         deletePhotos(id);
+        if (affected > 0) {
+            deleteUnusedPhotoUrls(oldUrls);
+        }
         return affected;
     }
 
@@ -211,9 +219,41 @@ public class TalkService {
         if (talkId == null) {
             return;
         }
-        // TODO 上传模块：qiniu/minio 模式下原实现会按 URL 删除远端图片，等上传一起补
         talkPhotoMapper.delete(new LambdaQueryWrapper<TalkPhotoEntity>()
                 .eq(TalkPhotoEntity::getTalkId, talkId));
+    }
+
+    /**
+     * 旧图不再被任何说说引用时才删 OSS 对象；外部/本地 URL 会自动跳过。
+     */
+    private void deleteUnusedPhotoUrls(List<String> urls) {
+        if (urls == null || urls.isEmpty()) {
+            return;
+        }
+        Set<String> unique = new LinkedHashSet<>();
+        for (String url : urls) {
+            if (url != null && !url.isBlank()) {
+                unique.add(url);
+            }
+        }
+        if (unique.isEmpty()) {
+            return;
+        }
+        List<TalkPhotoEntity> remaining = talkPhotoMapper.selectList(
+                new LambdaQueryWrapper<TalkPhotoEntity>()
+                        .select(TalkPhotoEntity::getUrl)
+                        .in(TalkPhotoEntity::getUrl, unique));
+        Set<String> stillUsed = new HashSet<>();
+        for (TalkPhotoEntity photo : remaining) {
+            if (photo.getUrl() != null) {
+                stillUsed.add(photo.getUrl());
+            }
+        }
+        for (String url : unique) {
+            if (!stillUsed.contains(url)) {
+                ossService.deleteByUrl(url);
+            }
+        }
     }
 
     private List<String> photoUrls(Integer talkId) {

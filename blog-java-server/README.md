@@ -12,14 +12,17 @@
 | MySQL | 8（复用原库，18 张表不动） |
 | JWT | 手写 HS256（`javax.crypto.Mac`），**不依赖 jjwt**，原因见下 |
 | 密码 | `spring-security-crypto` 的 BCrypt（不引入完整 Security） |
+| 图片存储 | 阿里云 OSS（`aliyun-sdk-oss` 3.18.1），本地 `local` 作为调试兜底 |
+| IP 属地 | `mica-ip2region` 3.2.12（内置 ip2region v4 + ipv6wry 数据，Apache-2.0，无需外网） |
 | 文档 | springdoc-openapi 2.6.0 |
 
-> **两个依赖坑（已解决，别改回去）**
+> **三个依赖坑（已解决，别改回去）**
 >
 > 1. MyBatis-Plus 从 **3.5.9** 起把 `PaginationInnerInterceptor` 等依赖 JSqlParser 的插件拆到了独立模块，只引 `mybatis-plus-spring-boot3-starter` 会报「找不到符号 PaginationInnerInterceptor」。必须再加 `mybatis-plus-jsqlparser`。
 > 2. jjwt 0.12 在**签发和验签两侧**都强制 HMAC 密钥 ≥ 256 位，而现网 Node 用的是 4 字节的 `JWT_SECRET=blog`，实测会抛
 >    `The verification key's size is 32 bits which is not secure enough for the HS256 algorithm`。
 >    为了迁移期两边互认 token，改成手写 HS256，行为与 Node 的 `jsonwebtoken` 一致（含 `iat`/`exp`、base64url、常量时间验签）。
+> 3. `aliyun-sdk-oss` 通过 Apache HttpClient 带进了 `commons-logging`，Spring Boot 用 `spring-jcl` 提供同名 API，两个 jar 同时存在会打冲突警告。`pom.xml` 里已经对 `commons-logging` 做了 exclusion，别删。
 
 ## 运行
 
@@ -36,26 +39,145 @@ export MYSQL_DB=online_blog
 export JWT_SECRET=blog
 export ADMIN_PASSWORD=你的超管密码
 export APP_PORT=8088
+# 阿里云 OSS（上传图片用）
+export UPLOADTYPE=oss
+export ALIBABA_CLOUD_ACCESS_KEY_ID=你的AccessKeyId
+export ALIBABA_CLOUD_ACCESS_KEY_SECRET=你的AccessKeySecret
+export OSS_ENDPOINT=oss-cn-shanghai.aliyuncs.com
+export OSS_BUCKET_NAME=你的Bucket
+# 可选：自定义域名 / CDN
+# export OSS_DOMAIN=img.example.com
 java -jar target/blog-server-1.0.0.jar
 
 # 或者直接跑
 mvn spring-boot:run
 ```
 
-**本地开发**（推荐）：把密码写进 `src/main/resources/application-local.yml`，该文件已被 gitignore：
+**本地开发**（推荐）：把密码和 OSS 密钥写进 `src/main/resources/application-local.yml`，该文件已被 gitignore：
 
 ```yaml
 spring:
   datasource:
     username: root
     password: 你的密码
+
+blog:
+  upload-type: oss
+
+oss:
+  endpoint: oss-cn-shanghai.aliyuncs.com
+  bucket-name: 你的Bucket
+  access-key-id: 你的AccessKeyId
+  access-key-secret: 你的AccessKeySecret
 ```
 
-由 `application.yml` 的 `spring.config.import: optional:classpath:application-local.yml` 自动加载，**不依赖启动时的工作目录**。也可以用上面的环境变量，优先级更高。
+由 `application.yml` 的 `spring.profiles.active: local` 自动加载，**不依赖启动时的工作目录**。也可以用上面的环境变量，优先级更高。
 
 > 注意：`application-local.yml` 会被打进 jar（`BOOT-INF/classes/`）。本地开发没问题，**部署到服务器时请用环境变量 `MYSQL_PASSWORD` 覆盖**，不要把带密码的 jar 分发出去。
 
 **重要**：Spring Boot **不会**读原项目的 `.env` 文件（那个文件里有行内注释，按 properties 解析会把注释当成值）。用 docker compose 时把环境变量写进 `environment:` 即可。
+
+## 图片存储（阿里云 OSS）
+
+`POST /upload/img` 支持三种模式（`blog.upload-type` / `UPLOADTYPE`）：
+
+| 模式 | 行为 |
+|---|---|
+| `oss` | 上传到阿里云 OSS，返回 `https://<bucket>.<endpoint>/<dir>/<uuid>.<ext>`（或自定义域名） |
+| `local` | 落盘 `upload/local`，返回 `http://127.0.0.1:<port>/local/<file>`，仅本地调试 |
+| `online` | 落盘 `upload/online`，返回 `/online/**` URL |
+
+OSS 关键配置：
+
+| 配置 | 环境变量 | 说明 |
+|---|---|---|
+| `oss.endpoint` | `OSS_ENDPOINT` | 如 `oss-cn-shanghai.aliyuncs.com` |
+| `oss.bucket-name` | `OSS_BUCKET_NAME` | Bucket 名称 |
+| `oss.access-key-id` | `ALIBABA_CLOUD_ACCESS_KEY_ID` | AccessKey ID |
+| `oss.access-key-secret` | `ALIBABA_CLOUD_ACCESS_KEY_SECRET` | AccessKey Secret |
+| `oss.domain` | `OSS_DOMAIN` | 可选，自定义域名 / CDN |
+| `oss.dir` | `OSS_DIR` | 对象前缀，默认 `images/` |
+| `oss.referer` | `OSS_REFERER` | 防盗链用的 Referer；留空时自动用上传请求的 Origin / Referer |
+| `oss.public-read` | `OSS_PUBLIC_READ` | 上传时把对象 ACL 设为公共读，默认 `true` |
+
+> **Bucket 权限**：OSS 新建 Bucket 默认私有，匿名访问会 403。上传代码在 `oss.public-read=true`（默认）时会把对象设为 `public-read`；如果 Bucket 开启了「阻止公共访问」，需要先在控制台关闭（或把 Bucket 读权限改成公共读），否则上传会返回 `AccessDenied`。CDN 场景请把 `oss.domain` 配成绑定域名。
+>
+> 图片文件名是 UUID，内容不会变，上传时带了 `Cache-Control: public, max-age=31536000`，可直接走 OSS/CDN 缓存。
+>
+> **安全提醒**：`POST /upload/img` 保持原实现的契约，不强制登录，只有按 IP 的 100 次/分钟限流。公网部署时建议给 `UploadController` 加 `@RequireRole(RequireRole.Level.LOGIN)`，并在 OSS 配防盗链，避免被匿名刷上传量。
+
+### 防盗链（Referer 白名单）
+
+OSS 控制台 → 目标 Bucket → **数据安全 → 防盗链**：
+
+- 白名单填**页面域名**（不是 OSS 图片域名），HTTP / HTTPS 各写一条，带端口的也要写：
+  ```
+  https://your-blog.com
+  http://your-blog.com
+  https://admin.your-blog.com
+  http://localhost:8080
+  http://127.0.0.1:8080
+  http://localhost:8848
+  http://127.0.0.1:8848
+  ```
+  （`8080` 是 `blog-v3` 开发端口，`8848` 是 `blog-v3-admin` 开发端口）
+- 「空 Referer」：严格防刷可以选“不允许”；但这样直接在浏览器地址栏打开 OSS 链接会 403，部分移动端/小程序也可能不带 Referer。不确定时先选“允许”。
+- 匹配不忽略协议（`http` 和 `https` 要分别配），支持 `*` / `?` 通配符。
+
+代码侧的处理：
+
+- 浏览器加载图片时会自动带 Referer；两个前端的 `index.html` 已加 `<meta name="referrer" content="strict-origin-when-cross-origin">`，跨域时至少会带 `https://你的域名`。
+- 后端上传是带 `Authorization` 的 SDK 请求，按[阿里云文档](https://help.aliyun.com/zh/oss/user-guide/0003-00000501)**不触发防盗链**；但本项目仍会给 `PutObjectRequest` 补 `Referer`：优先用 `oss.referer`，没配就用上传请求自身的 `Origin` / `Referer`。
+- 前台、后台、本地调试域名比较多时，建议直接配 `oss.referer` 成白名单里的主域名，最稳：
+  ```yaml
+  oss:
+    referer: https://your-blog.com
+  ```
+- `oss.domain` 建议用 HTTPS：HTTPS 页面引用 HTTP 图片时，浏览器会按降级策略不发 Referer，而且会被混合内容拦截。
+
+**环境变量不生效？** Windows 修改系统环境变量只对**之后新启动的进程**生效：已经打开的 IDEA、终端、Maven 进程不会刷新，必须完全退出再打开（只点“重新运行”没用）。启动日志里会打印：
+
+- `OSS 配置已加载: endpoint=..., bucket=..., accessKeyId=LTAI***xx`：说明当前进程读到了密钥
+- `OSS 配置未完整加载: ... accessKeyId=缺失 ...`：说明当前进程没有继承到环境变量
+
+如果不想折腾环境变量，直接写进 `application-local.yml`（已 gitignore）最省事；或者在 IDEA 的 `Run -> Edit Configurations -> Environment variables` 里单独给这个启动配置加变量。
+
+**旧图清理**：替换/删除头像、文章封面、说说图片、相册封面、相册照片、页面背景、聊天图片时，会按 URL 反推 OSS key 删除旧对象。只有 `UPLOADTYPE=oss` 才执行；只删当前 Bucket / `oss.domain` 下、位于 `oss.dir` 前缀（默认 `images/`）的对象；删除前会确认没有其他记录再引用，外部 URL（如默认头像 `mrzym.top/online/...`）自动跳过。删除是 best-effort，失败只打日志，不影响主流程。
+
+**旧图片**：`upload/local` 下已有的文件不会被自动搬运；切到 OSS 后旧 URL 仍由 `/local/**` 静态映射提供服务。要彻底迁移，把文件上传到 OSS 的 `images/` 目录，再把数据库里的 `http://127.0.0.1:8088/local/` 替换成 OSS 地址即可（文章封面 `blog_article.article_cover`、正文 `blog_article.article_content`，其他表同理）：
+
+```sql
+-- 把 <bucket> / <endpoint> 换成实际值；旧 URL 的端口按实际情况调整
+UPDATE blog_article
+SET article_cover = REPLACE(article_cover,
+        'http://127.0.0.1:8088/local/',
+        'https://<bucket>.<endpoint>/images/')
+WHERE article_cover LIKE 'http://127.0.0.1:8088/local/%';
+
+UPDATE blog_article
+SET article_content = REPLACE(article_content,
+        'http://127.0.0.1:8088/local/',
+        'https://<bucket>.<endpoint>/images/')
+WHERE article_content LIKE '%http://127.0.0.1:8088/local/%';
+```
+
+## IP 属地
+
+使用 `mica-ip2region` 3.2.12（Apache-2.0），依赖内已包含 `ip2region/ip2region.xdb`（IPv4）和 `ip2region/ipv6wry.db`（IPv6），默认自动配置，无需额外配置或下载数据。
+
+- 中国 IP 返回省份，如「江苏」「广东」「北京」
+- 取不到省份时返回国家，如「美国」
+- 内网 / 回环 / 解析失败返回「本机地址」
+- 历史数据里已经是「四川」这种属地文本的原样返回
+
+需要替换数据文件时，在 `application.yml` 里配置：
+
+```yaml
+mica:
+  ip2region:
+    db-file-location: classpath:ip2region/ip2region.xdb
+    ipv6db-file-location: classpath:ip2region/ipv6wry.db
+```
 
 ## 已实现
 
@@ -75,9 +197,8 @@ spring:
 | message | `add`（5 次）/ `update`（5 次）/ `delete`（5 次）/ `backDelete` / `like`（5 次）/ `cancelLike`（5 次）/ `getMessageList` / `getAllMessage` / `getHotTagList` | ✅ |
 | talk | `publishTalk` / `updateTalk` / `deleteTalkById` / `togglePublic` / `toggleTop` / `revertTalk` / `getTalkList` / `getTalkById` / `like`（5 次）/ `cancelLike`（5 次）/ `blogGetTalkList` | ✅ |
 | photo / photoAlbum | `photo/add` / `photo/delete` / `photo/revert` / `photo/getPhotoListByAlbumId` / `photo/getAllPhotosByAlbumId`；`photoAlbum/add` / `delete` / `update` / `/`（分页）/ `getAllAlbumList` | ✅ |
-| utils / 根路由 | `POST /upload/img`（1 分钟 100 次）；`GET /` 欢迎页 | ✅（qiniu/minio 待配置） |
+| utils / 根路由 | `POST /upload/img`（1 分钟 100 次）；`GET /` 欢迎页 | ✅（oss / local / online） |
 | chat | `add`（登录）/ `deleteOne` / `delete`（管理员，TRUNCATE）/ `getChatList` + 独立端口 8889 的 WebSocket（`init`/`message`/`revert`/`offline`/`onlineList`） | ✅ |
-| comment / message / talk / photo / chat / 上传 | — | ⬜ 待做 |
 
 **首页闭环已通**：`config` + `category` + `tag` + `pageHeader` + `statistic` + `user` + 文章列表，前台首页不再有 404。
 
@@ -127,9 +248,10 @@ spring:
 - **文章按标签筛选修正了原实现的退化**：`getArticleList` 传了一个没有任何文章的 `tag_id` 时，Node 会因为 `articleIdList` 为 null 跳过过滤，把全部文章返回；这里按语义返回空列表。
 - **`article/updateUrl` 修正为可用**：原实现把 service 直接当 handler 用、没有设置 `ctx.body`，现网访问是 404 空响应；这里补成真正执行封面域名替换并返回受影响行数。
 - **首页/时间轴的 current/size 回显字符串**：现网是路径参数，响应里是 `"1"`/`"2"`；首页实现之前回显的是数字，已一并对齐。
-- **IP 属地库未接**：Node 用 `xz-ipnet` 把 IP 转成省份；Java 侧暂未引入离线库。`IpUtil.locate` 目前对“库里的值是 IP”统一返回「本机地址」（与 Node 查不到归属时的兜底一致），对历史数据里已经是「四川」这种属地文本的原样返回。接 `ip2region` 后只需改 `IpUtil.locate`。
+- **IP 属地已接离线库**：Node 用 `xz-ipnet`；Java 改用 `mica-ip2region`（ip2region v4 + ipv6wry 数据已打进依赖，Apache-2.0），`IpLocationService` 返回「江苏」「广东」「北京」这类省份，取不到省份时返回国家；内网/回环/解析失败返回「本机地址」，历史数据里已经是「四川」这种属地文本的原样返回。
+- **`IpUtil.stripPort` 修正了 IPv6 截断**：原 Node 的 `ip.split(":").pop()` 会把裸 IPv6 截成最后一段；Java 现在只对 `IPv4:port` / `[IPv6]:port` 去端口，裸 IPv6 原样保留。
 - **昵称敏感词兜底改为内置短语**：Node 命中敏感词/脚本关键字后会去 iciba 接口取「每日一句」（依赖外网）；这里用内置短语，避免注册被外部接口拖死。
-- **头像/封面远程删除未接**：`updateOwnUserInfo`、`adminUpdateUserInfo`、`article/update` 里 qiniu/minio 模式的删图逻辑依赖上传模块，暂时只打日志，等 utils 上传一起补。
+- **头像/封面 OSS 旧图已接删除**：`updateOwnUserInfo`、`adminUpdateUserInfo`、`article/update`、`article/delete(status=3)` 会在更新/删除成功后删旧 OSS 对象；外部地址（默认头像、历史 `mrzym.top` 图片等）自动跳过，删除前会确认没有其他记录再引用。
 - **评论后台的 from_name/to_name 过滤修正**：原实现把列名写成了不存在的 `name`，一旦传这两个筛选就 500；这里改成按 `from_name` / `to_name` 列 like 查询。
 - **评论错误码照抄原实现的 bug**：`controller/comment` 里 `errorCode` 用的是 `ERRORCODE.CATEGORY`（100004），不是 COMMENT（100015），评论相关错误现在仍返回 100004。
 - **评论出参里的 `form_name`**：原实现把 `from_name` 拼成了 `form_name`，前端评论列表真的在读这个 key，所以保留；`is_like` 只在点赞状态场景出现。
@@ -139,13 +261,13 @@ spring:
 - **说说删除的返回类型不统一**：进回收站（status 1/2）返回 `[count]`（Sequelize update 数组），永久删除（status 3）返回数字 `count`；已照抄。
 - **相册/图片删除的返回类型同理不统一**：图片 `type=1` 回收站返回 `[count]`、`type=2` 返回数字；相册删除返回 boolean。
 - **相册分页路径是 `/photoAlbum/`**（带斜杠），Controller 用 `@PostMapping({"", "/"})` 同时兼容。
-- **上传四模式现状**：`local` 已完整实现（落盘 `upload/local`，通过 `/local/**` 静态访问，URL 形如 `http://127.0.0.1:8088/local/xxx`）；`online` 落盘 `upload/online` 并返回 `/online/**` 的 URL（Node 的 online 分支没写 body，是 404，这里补成可用）；`qiniu` / `minio` 需要 ACCESSKEY/SECRETKEY/BUCKET，未配置时返回 `100006`「当前上传模式未配置」。
-- **上传目录按进程 cwd 解析**：`upload/local` 相对启动目录（与 Node 的 `__dirname/upload` 不同），部署时请固定工作目录或改成绝对路径。
+- **上传三模式现状**：`oss` 已接入阿里云 OSS（`aliyun-sdk-oss`，对象默认公共读，URL 为 `https://<bucket>.<endpoint>/images/<uuid>.<ext>` 或 `oss.domain`）；`local` 落盘 `upload/local`，通过 `/local/**` 静态访问；`online` 落盘 `upload/online` 并返回 `/online/**` 的 URL（Node 的 online 分支没写 body，是 404，这里补成可用）；`qiniu` / `minio` 未实现，配置成这两个值会返回 `100006`「当前上传模式未配置」。
+- **本地落盘目录按进程 cwd 解析**：`upload/local` / `upload/online` 相对启动目录（与 Node 的 `__dirname/upload` 不同），部署时请固定工作目录或改成绝对路径；OSS 模式不受影响。
 - **聊天的 createdAt/updatedAt 是 ISO UTC**：原实现改的是 `message.dataValues`，Date 绕过了 model 的 getter，输出形如 `2026-10-10T04:06:11.000Z`；且 `size` 是本次返回条数、`list` 里可能出现 `null`（历史脏数据 user_id 为空），均已照抄。
 - **聊天删除接口没有 result 字段**：`deleteOne` / `delete` 的响应只有 `{code,message}`（原实现 `result()` 只传一个参数，undefined 被 JSON.stringify 丢掉）。
 - **WebSocket 用 Java-WebSocket 实现**：Spring 自带 WebSocket 只能挂主端口，聊天要求独立 8889，所以引入 `org.java-websocket:Java-WebSocket` 单独起服务；协议与 Node 的 ws 版本一致。构建时若本机 `D:\Java\MavenRepority` 不可写，用 `-s tools/mvn-settings.xml` 把本地仓库指到工作区。
 - **限流已全部就绪**：`@RateLimit` + 进程内固定窗口（`limit/RateLimitStore`、`limit/RateLimitInterceptor`），已挂 `/links/add`（5 次/分）、`/user/register`（3 次/分）、`/like/addLike`、`/comment/*`、`/message/*`、`/talk/like`、`/upload/img`（100 次/分）、`/config/addView`（60 分钟 100 次）；全局 200 次/分钟由 `limit/GlobalRateLimitFilter` 实现。超限行为与现网一致：429 + `{"message":"..."}` + `X-RateLimit-*` + `Retry-After`（固定为窗口长度，同 koa2-ratelimit）。
-- **上传未实现（仅 config/update 的删图）**：`/config/update` 里按 `UPLOADTYPE` 删除旧图的逻辑依赖具体存储实现，暂时跳过；上传接口本身已实现 local/online。
+- **OSS 旧图清理已接**：`/config/update`、头像/封面/说说图片/相册封面/相册照片/页面背景/聊天图片在替换或删除后都会清 OSS 旧对象；只有 `UPLOADTYPE=oss` 时才执行，且只处理当前 Bucket / `oss.domain` 下、位于 `oss.dir` 前缀（默认 `images/`）的对象，外部 URL、本地 URL、历史 `mrzym.top` 图片不会被误删。删除是 best-effort，失败只打日志，不影响主流程。
 
 ## 验证建议
 
@@ -166,8 +288,8 @@ curl -s -X POST http://127.0.0.1:8088/category/getCategoryList \
 
 | 项 | 结果 |
 |---|---|
-| `mvn package` | ✅ BUILD SUCCESS，80+ 个源文件，产出 33 MB 可执行 jar |
-| Spring 上下文启动 | ✅ Tomcat 起在配置端口 |
+| `mvn package` | ✅ BUILD SUCCESS，25 个测试通过（OSS 上传/删除、Referer、IP 属地、配置旧图清理、JSON 命名） |
+| Spring 上下文启动 | ✅ Tomcat 起在配置端口；`mica-ip2region` 数据从 classpath 加载成功 |
 | 错误响应体 | ✅ 500 + `{"code":"100007","message":"获取网站设置失败"}`（无 `result` 字段） |
 | 404 响应 | ✅ `{"code":"404","message":"接口没有找到"}` |
 | 未带 token | ✅ 401 + `{"code":"100016","message":"您没有权限访问，请先登录"}` |
@@ -176,6 +298,7 @@ curl -s -X POST http://127.0.0.1:8088/category/getCategoryList \
 | 伪造签名 | ✅ 403 + `{"code":"100002","message":"无效的token"}` |
 | Swagger | ✅ `/v3/api-docs` 列出全部接口 |
 | JSON 命名策略（`JsonNamingTest`） | ✅ 4 个用例通过：`category_name` 转下划线、`createdAt` 保持驼峰、`page`/`pageSize` 收发正常、`categoryIdList` 不被转成 `category_id_list` |
+| IP 属地解析（`IpLocationServiceTest`） | ✅ `180.109.81.135`→江苏、`8.8.8.8`→美国、IPv6→广东、内网/回环→本机地址，历史文本原样返回 |
 | 数据库真实读写 | ✅ 在临时库灌演示数据实测通过（见下） |
 | `GET /statistic` | ✅ `{"articleCount":2,"tagCount":2,"categoryCount":2,"userCount":1}`（驼峰） |
 | `GET /pageHeader/getAll` | ✅ `[{"id":1,"route_name":"Home","bg_url":"..."}]`（下划线，无时间戳） |
@@ -216,14 +339,12 @@ curl -s -X POST http://127.0.0.1:8088/category/getCategoryList \
 | `talk` 置顶/公开/恢复/点赞/删除 | ✅ 文案按目标状态取名；回收返回 `[1]`、永久删除返回 `1`；点赞走 like_times 自增，不写 blog_like |
 | `photo` 增删查 | ✅ `bulkCreate` 返回创建行数组；`type=1` 返回 `[count]`、`type=2` 返回数字；`getAllPhotosByAlbumId` 只出 status=1 且按创建时间倒序 |
 | `photoAlbum` 增删改查 | ✅ 名称唯一（改时排除自己）；删除相册连带删图片；分页 `{current,size,list,total}`、全量按创建时间倒序 |
-| `POST /upload/img` | ✅ multipart 字段 `file`，local 模式返回 `{url}` 且该 URL 可直接 200 访问；空文件 500/`100006`；1 分钟 100 次限流 |
+| `POST /upload/img` | ✅ multipart 字段 `file`；`oss` 模式返回 OSS 公网 URL，`local` 模式返回可直接 200 访问的 `{url}`；空文件/未配置 OSS 时 500 + `100006`；1 分钟 100 次限流 |
 | `GET /` | ✅ `text/plain` 欢迎语，与原实现一致 |
 | `chat` 四个接口 | ✅ `getChatList` 返回 `{current,size,total,list}`（时间 ISO UTC、size=本次条数）；`deleteOne`/`delete` 无 `result` 字段；TRUNCATE 后自增重置为 1 |
 | WebSocket 8889 | ✅ Node 客户端实测：`init` -> `onlineList`（含 user_id/nick_name/avatar/createTime）；`message` -> 落库并广播带 `id`；`revert` 原样广播；`offline`/断开 -> `onlineList` 清空 |
 | 全局限流 | ✅ 每个响应带 `X-RateLimit-Limit: 200` / `Remaining` / `Reset`，`/config/addView` 被接口级 100 次限流覆盖 |
 | 总接口数 | ✅ 103 / 103（`endpoints.json` 全部有对应实现） |
-| `POST /upload/img` | ✅ multipart 字段 `file`，local 模式返回 `{url}` 且该 URL 可直接 200 访问；空文件 500/`100006`；1 分钟 100 次限流 |
-| `GET /` | ✅ `text/plain` 欢迎语，与原实现一致 |
 
 > **踩过的坑**：`ArticleListItem` 一开始只写了 `@JsonProperty("createdAt")`，漏了
 > `@JsonFormat(pattern = "yyyy-MM-dd HH:mm:ss")`，结果输出成 `2026-10-18T19:09:39`。

@@ -7,7 +7,6 @@ import com.mrzym.blog.auth.JwtUtil;
 import com.mrzym.blog.common.BizException;
 import com.mrzym.blog.common.CurrentPageResult;
 import com.mrzym.blog.common.ErrorCode;
-import com.mrzym.blog.common.IpUtil;
 import com.mrzym.blog.common.Num;
 import com.mrzym.blog.common.SensitiveWordFilter;
 import com.mrzym.blog.config.BlogProperties;
@@ -49,6 +48,8 @@ public class UserService {
     private final UserMapper userMapper;
     private final JwtUtil jwtUtil;
     private final BlogProperties blogProperties;
+    private final IpLocationService ipLocationService;
+    private final OssService ossService;
 
     private final BCryptPasswordEncoder passwordEncoder = new BCryptPasswordEncoder();
 
@@ -57,7 +58,7 @@ public class UserService {
         UserInfo info = userMapper.selectInfoById(id);
         if (info != null) {
             // 库里存的是原始 IP，展示时转属地（对齐原实现的 getIpAddress）
-            info.setIpAddress(IpUtil.locate(info.getIpAddress()));
+            info.setIpAddress(ipLocationService.locate(info.getIpAddress()));
         }
         return info;
     }
@@ -140,7 +141,7 @@ public class UserService {
         }
 
         updateIp(user.getId(), ip);
-        String ipAddress = IpUtil.locate(ip);
+        String ipAddress = ipLocationService.locate(ip);
 
         Map<String, Object> claims = new LinkedHashMap<>();
         claims.put("id", user.getId());
@@ -161,11 +162,7 @@ public class UserService {
 
     public boolean updateOwnUserInfo(Integer userId, UpdateOwnUserInfoForm form) {
         UserEntity one = userMapper.selectById(userId);
-        if (one != null && one.getAvatar() != null && !one.getAvatar().isEmpty()
-                && !one.getAvatar().equals(form.getAvatar())) {
-            // TODO 上传模块：qiniu/minio 模式下要删除旧头像，依赖 utils 上传实现
-            log.debug("跳过删除旧头像: {}", one.getAvatar());
-        }
+        String oldAvatar = one == null ? null : one.getAvatar();
 
         String nickName = SensitiveWordFilter.filter(form.getNickName());
         LocalDateTime now = LocalDateTime.now().withNano(0);
@@ -175,7 +172,11 @@ public class UserService {
         patch.setAvatar(form.getAvatar());
         patch.setQq(form.getQq());
         patch.setUpdatedAt(now);
-        return userMapper.updateById(patch) > 0;
+        boolean updated = userMapper.updateById(patch) > 0;
+        if (updated) {
+            deleteAvatarIfUnused(oldAvatar, form.getAvatar());
+        }
+        return updated;
     }
 
     public boolean updatePassword(Integer userId, String username, UpdatePasswordForm form) {
@@ -210,18 +211,33 @@ public class UserService {
     public boolean adminUpdateUserInfo(AdminUpdateUserInfoForm form) {
         Integer id = Num.toInteger(form.getId());
         UserEntity one = id == null ? null : userMapper.selectById(id);
-        if (one != null && one.getAvatar() != null && !one.getAvatar().isEmpty()
-                && !one.getAvatar().equals(form.getAvatar())) {
-            // TODO 上传模块：qiniu/minio 模式下要删除旧头像
-            log.debug("跳过删除旧头像: {}", one.getAvatar());
-        }
+        String oldAvatar = one == null ? null : one.getAvatar();
 
         UserEntity patch = new UserEntity();
         patch.setId(id);
         patch.setNickName(form.getNickName());
         patch.setAvatar(form.getAvatar());
         patch.setUpdatedAt(LocalDateTime.now().withNano(0));
-        return userMapper.updateById(patch) > 0;
+        boolean updated = userMapper.updateById(patch) > 0;
+        if (updated) {
+            deleteAvatarIfUnused(oldAvatar, form.getAvatar());
+        }
+        return updated;
+    }
+
+    /**
+     * 旧头像不再被任何用户引用时才删除 OSS 对象。
+     * 外部地址（如默认头像 http://mrzym.top/online/...）会被 OssService 自动跳过。
+     */
+    private void deleteAvatarIfUnused(String oldAvatar, String newAvatar) {
+        if (oldAvatar == null || oldAvatar.isBlank() || oldAvatar.equals(newAvatar)) {
+            return;
+        }
+        Long refs = userMapper.selectCount(new LambdaQueryWrapper<UserEntity>()
+                .eq(UserEntity::getAvatar, oldAvatar));
+        if (refs == null || refs == 0) {
+            ossService.deleteByUrl(oldAvatar);
+        }
     }
 
     public CurrentPageResult<UserListItem> getUserList(UserListQuery query) {
@@ -256,7 +272,7 @@ public class UserService {
             item.setCreatedAt(entity.getCreatedAt());
             item.setUpdatedAt(entity.getUpdatedAt());
             item.setIpAddress(entity.getIp() == null || entity.getIp().isBlank()
-                    ? "火星" : IpUtil.locate(entity.getIp()));
+                    ? "火星" : ipLocationService.locate(entity.getIp()));
             return item;
         }).toList();
 

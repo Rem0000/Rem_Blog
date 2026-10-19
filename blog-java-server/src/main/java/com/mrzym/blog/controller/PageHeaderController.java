@@ -79,11 +79,6 @@ public class PageHeaderController {
     public Result<Integer> delete(@RequestBody PageHeaderDeleteForm form) {
         try {
             Integer affected = pageHeaderService.delete(Num.toInteger(form.getId()));
-            if (form.getUrl() != null && !form.getUrl().isBlank()) {
-                // TODO 上传模块（qiniu/minio）：原实现在这两种模式下会远程删图，
-                //  依赖 utils/qiniuUpload、utils/minioUpload，等上传模块一起补。
-                log.debug("跳过远程删图: {}", form.getUrl());
-            }
             return Result.ok("删除背景成功", affected);
         } catch (Exception e) {
             log.error("删除背景失败", e);

@@ -15,6 +15,7 @@ import java.util.List;
 public class PageHeaderService {
 
     private final PageHeaderMapper pageHeaderMapper;
+    private final OssService ossService;
 
     public List<PageHeaderItem> getAll() {
         return pageHeaderMapper.selectAll();
@@ -49,8 +50,24 @@ public class PageHeaderService {
         if (id == null) {
             return null;
         }
+        PageHeaderEntity old = pageHeaderMapper.selectById(id);
         int affected = pageHeaderMapper.deleteById(id);
+        if (affected > 0) {
+            deleteBgIfUnused(old == null ? null : old.getBgUrl());
+        }
         return affected > 0 ? affected : null;
+    }
+
+    /** 背景图不再被任何页面引用时才删除 OSS 对象 */
+    private void deleteBgIfUnused(String bgUrl) {
+        if (bgUrl == null || bgUrl.isBlank()) {
+            return;
+        }
+        Long refs = pageHeaderMapper.selectCount(new LambdaQueryWrapper<PageHeaderEntity>()
+                .eq(PageHeaderEntity::getBgUrl, bgUrl));
+        if (refs == null || refs == 0) {
+            ossService.deleteByUrl(bgUrl);
+        }
     }
 
     /** 按 route_name 查一条，对应原实现 getOneByPath */

@@ -14,7 +14,9 @@ import org.springframework.stereotype.Service;
 
 import java.time.LocalDateTime;
 import java.util.ArrayList;
+import java.util.HashSet;
 import java.util.List;
+import java.util.Set;
 
 /**
  * 相册图片，对齐原实现 service/photo。
@@ -24,6 +26,7 @@ import java.util.List;
 public class PhotoService {
 
     private final PhotoMapper photoMapper;
+    private final OssService ossService;
 
     /** 批量新增，返回创建出来的行（对齐 Sequelize bulkCreate） */
     public List<PhotoEntity> add(List<PhotoAddRequest.PhotoItem> items) {
@@ -51,6 +54,9 @@ public class PhotoService {
 
     /** type 1 进回收站（返回 [count]），其它永久删除（返回 count） */
     public Object delete(List<Integer> idList, int type) {
+        if (idList == null || idList.isEmpty()) {
+            return type == 1 ? List.of(0) : 0;
+        }
         if (type == 1) {
             int affected = photoMapper.update(null, new LambdaUpdateWrapper<PhotoEntity>()
                     .set(PhotoEntity::getStatus, 2)
@@ -58,7 +64,12 @@ public class PhotoService {
                     .in(PhotoEntity::getId, idList));
             return List.of(affected);
         }
-        return photoMapper.deleteBatchIds(idList);
+        List<PhotoEntity> photos = photoMapper.selectBatchIds(idList);
+        int affected = photoMapper.deleteBatchIds(idList);
+        if (affected > 0) {
+            deleteUnusedPhotoUrls(photos);
+        }
+        return affected;
     }
 
     /** 批量恢复（status -> 1），返回 [count] */
@@ -107,7 +118,39 @@ public class PhotoService {
     }
 
     public void deleteByAlbumId(Integer albumId) {
+        List<PhotoEntity> photos = photoMapper.selectList(new LambdaQueryWrapper<PhotoEntity>()
+                .eq(PhotoEntity::getAlbumId, albumId));
         photoMapper.delete(new LambdaQueryWrapper<PhotoEntity>()
                 .eq(PhotoEntity::getAlbumId, albumId));
+        deleteUnusedPhotoUrls(photos);
+    }
+
+    private void deleteUnusedPhotoUrls(List<PhotoEntity> photos) {
+        if (photos == null || photos.isEmpty()) {
+            return;
+        }
+        Set<String> urls = new HashSet<>();
+        for (PhotoEntity photo : photos) {
+            if (photo != null && photo.getUrl() != null && !photo.getUrl().isBlank()) {
+                urls.add(photo.getUrl());
+            }
+        }
+        if (urls.isEmpty()) {
+            return;
+        }
+        List<PhotoEntity> remaining = photoMapper.selectList(new LambdaQueryWrapper<PhotoEntity>()
+                .select(PhotoEntity::getUrl)
+                .in(PhotoEntity::getUrl, urls));
+        Set<String> stillUsed = new HashSet<>();
+        for (PhotoEntity photo : remaining) {
+            if (photo.getUrl() != null) {
+                stillUsed.add(photo.getUrl());
+            }
+        }
+        for (String url : urls) {
+            if (!stillUsed.contains(url)) {
+                ossService.deleteByUrl(url);
+            }
+        }
     }
 }

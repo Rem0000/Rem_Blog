@@ -63,10 +63,6 @@ public class PhotoController {
                 }
             }
             int type = Num.toInt(request.getType(), 0);
-            if (type == 2 && request.getImgList() != null) {
-                // TODO 上传模块：qiniu/minio 模式下按 url 删除远端图片
-                log.debug("跳过远程删图，共 {} 张", request.getImgList().size());
-            }
             return Result.ok("删除图片成功", photoService.delete(idList, type));
         } catch (Exception e) {
             log.error("删除图片失败", e);

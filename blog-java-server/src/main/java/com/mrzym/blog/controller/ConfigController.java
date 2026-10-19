@@ -26,8 +26,7 @@ public class ConfigController {
     private final ConfigService configService;
 
     /**
-     * 修改网站设置。原实现还会在 UPLOADTYPE=qiniu|minio 时删除被替换的旧图，
-     * 那部分依赖上传模块（批次 5），这里先留空，不影响契约。
+     * 修改网站设置。替换头像/背景/赞赏码等 OSS 图片时，会顺带删除旧对象（外部 URL 自动跳过）。
      */
     @PostMapping("/update")
     @RequireRole(RequireRole.Level.ADMIN)

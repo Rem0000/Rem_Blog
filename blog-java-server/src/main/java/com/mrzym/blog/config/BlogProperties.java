@@ -15,6 +15,6 @@ public class BlogProperties {
     /** 内置超管 admin 的密码，对应 .env 的 ADMIN_PASSWORD */
     private String adminPassword = "";
 
-    /** 上传方式：local / minio / qiniu / online */
-    private String uploadType = "local";
+    /** 上传方式：oss / local / online（qiniu / minio 未实现） */
+    private String uploadType = "oss";
 }

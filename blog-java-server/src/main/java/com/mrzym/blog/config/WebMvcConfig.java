@@ -37,7 +37,7 @@ public class WebMvcConfig implements WebMvcConfigurer {
 
     @Override
     public void addResourceHandlers(ResourceHandlerRegistry registry) {
-        // 上传后的静态访问，对应 Node 的 koa-static(upload)：
+        // 旧的本地上传文件静态访问（图片已切到 OSS，保留以兼容历史 URL）：
         //   /local/xxx  -> upload/local/xxx
         //   /online/xxx -> upload/online/xxx
         registry.addResourceHandler("/local/**").addResourceLocations(dirUri("upload", "local"));

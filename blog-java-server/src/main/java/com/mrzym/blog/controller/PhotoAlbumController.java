@@ -51,12 +51,11 @@ public class PhotoAlbumController {
         }
     }
 
-    /** 删除相册（同时删掉相册下的图片） */
+    /** 删除相册（同时删掉相册下的图片和 OSS 旧图） */
     @DeleteMapping("/delete/{id}")
     @RequireRole(RequireRole.Level.ADMIN_NOT_SUPER)
     public Result<Boolean> delete(@PathVariable Integer id) {
         try {
-            // TODO 上传模块：qiniu/minio 模式下要删除相册封面
             return Result.ok("删除相册成功", photoAlbumService.delete(id));
         } catch (Exception e) {
             log.error("删除相册失败", e);

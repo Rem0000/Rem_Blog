@@ -48,8 +48,26 @@ blog:
   jwt-secret: ${JWT_SECRET:blog}
   # 内置超管账号 admin 的密码；为空时 admin 无法登录（与原实现一致）
   admin-password: ${ADMIN_PASSWORD:123}
-  # local / minio / qiniu / online
-  upload-type: ${UPLOADTYPE:local}
+  # oss / local / online（qiniu、minio 未实现）
+  # 默认 oss；本地没有 OSS 密钥时可用 UPLOADTYPE=local 回退到落盘
+  upload-type: ${UPLOADTYPE:oss}
+
+# 阿里云 OSS（UPLOADTYPE=oss 时生效）
+oss:
+  # 地域节点，如 oss-cn-shanghai.aliyuncs.com
+  endpoint: ${OSS_ENDPOINT:}
+  # AccessKey 建议用环境变量注入，不要写进仓库
+  access-key-id: ${ALIBABA_CLOUD_ACCESS_KEY_ID:}
+  access-key-secret: ${ALIBABA_CLOUD_ACCESS_KEY_SECRET:}
+  bucket-name: ${OSS_BUCKET_NAME:}
+  # 可选：绑定到 Bucket 的自定义域名 / CDN 域名；留空用 https://<bucket>.<endpoint>
+  domain: ${OSS_DOMAIN:}
+  # 对象前缀
+  dir: ${OSS_DIR:images/}
+  # 防盗链 Referer：填 OSS 白名单里的站点地址；留空时自动用上传请求的 Origin/Referer
+  referer: ${OSS_REFERER:}
+  # Bucket 默认私有，博客图片需要浏览器直接访问，上传时把对象 ACL 设为公共读
+  public-read: ${OSS_PUBLIC_READ:true}
 
 springdoc:
   swagger-ui:
